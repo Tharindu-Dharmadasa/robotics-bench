@@ -1,5 +1,10 @@
 @import "tailwindcss";
-:root{--paper:#ebe6d8;--surf:#f6f2e7;--ink:#1d1b16;--acc:#c8501e;--ok:#2f7d4f;--bad:#b3261e;--line:#bdb59f}
-@media(prefers-color-scheme:dark){:root{--paper:#1c1b17;--surf:#27251f;--ink:#ece6d4;--acc:#ff8a4c;--ok:#5fcf8a;--bad:#ff6b61;--line:#4a4638}}
+
+/* Colour "design tokens". Components use var(--name), so changing a value here
+   re-themes the whole app. Dark mode just swaps the values. */
+:root{--paper:#ebe6d8;--surface:#f6f2e7;--ink:#1d1b16;--accent:#c8501e;--ok:#2f7d4f;--bad:#b3261e;--line:#bdb59f}
+@media(prefers-color-scheme:dark){:root{--paper:#1c1b17;--surface:#27251f;--ink:#ece6d4;--accent:#ff8a4c;--ok:#5fcf8a;--bad:#ff6b61;--line:#4a4638}}
 body{background:var(--paper);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px}
+
+/* Accessibility: people who ask their OS for less motion get (almost) no animation. */
 @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
