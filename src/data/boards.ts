@@ -41,7 +41,7 @@ const DARK = '#2b2b2b', RED_WIRE = {color: '#e03a2f', width: 36, depth: 8, heigh
 
 export const BOARDS: BoardDefinition[] = [
   // ── 01 ─ the simplest circuit ──────────────────────────────────────────────
-  {id: 'led', figureLabel: 'Fig. 01', name: 'LED + resistor', pcbColor: '#2f6b4f',
+  {id: 'led', currentPaths: [['power', 'resistor', 'led']], figureLabel: 'Fig. 01', name: 'LED + resistor', pcbColor: '#2f6b4f',
    lessonText: 'A power source, a current limiter and a light. The resistor decides how much current the LED sees.',
    tryToBreakText: 'Power it without the resistor, then replace the burnt LED and try again.',
    parts: [
@@ -55,7 +55,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'LED lit. The resistor limits current to about 14 mA.', 14, {litPartIds: ['led']})]},
 
   // ── 02 ─ a transistor as an electronic switch ──────────────────────────────
-  {id: 'transistor', figureLabel: 'Fig. 02', name: 'Transistor switch', pcbColor: '#2f6b4f', inputs: [{id: 'signal', label: 'Signal'}],
+  {id: 'transistor', currentPaths: [['power', 'baseResistor', 'transistor'], ['power', 'ledResistor', 'led', 'transistor']], figureLabel: 'Fig. 02', name: 'Transistor switch', pcbColor: '#2f6b4f', inputs: [{id: 'signal', label: 'Signal'}],
    lessonText: 'A tiny base current lets a transistor switch a bigger load current, the way a microcontroller pin drives bigger loads.',
    tryToBreakText: 'Set the signal HIGH with no base resistor, or remove the LED resistor.',
    parts: [
@@ -74,7 +74,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'About 4 mA of base current switches about 16 mA through the LED.', 20, {litPartIds: ['led']})]},
 
   // ── 03 ─ Arduino Uno ───────────────────────────────────────────────────────
-  {id: 'uno', figureLabel: 'Fig. 03', name: 'Arduino Uno R3', pcbColor: '#2b5aa8',
+  {id: 'uno', currentPaths: [['usbPort', 'regulator', 'microcontroller', 'pin13Resistor', 'pin13Led'], ['crystal', 'microcontroller'], ['regulator', 'decouplingCap']], figureLabel: 'Fig. 03', name: 'Arduino Uno R3', pcbColor: '#2b5aa8',
    lessonText: 'An ATmega328P needs power, a clean 5 V rail and a 16 MHz clock before it runs your sketch. Pin 13 drives an LED.',
    tryToBreakText: 'Remove the crystal or the regulator, then power up. Try the LED without its resistor.',
    parts: [
@@ -96,7 +96,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'Blink sketch running: pin 13 toggles once a second.', 45, {blinkingPartIds: ['pin13Led']})]},
 
   // ── 04 ─ ESP32-S3 DevKit ───────────────────────────────────────────────────
-  {id: 'esp32', figureLabel: 'Fig. 04', name: 'ESP32-S3 DevKit', pcbColor: '#1f3a2e',
+  {id: 'esp32', currentPaths: [['usbPort', 'regulator', 'espModule', 'statusLed'], ['regulator', 'decouplingCap']], figureLabel: 'Fig. 04', name: 'ESP32-S3 DevKit', pcbColor: '#1f3a2e',
    lessonText: 'Two cores, Wi-Fi and Bluetooth, but every GPIO pin is 3.3 V only. A 3.3 V regulator feeds the chip from USB.',
    tryToBreakText: 'Solder the 5 V jumper onto a GPIO pin. Or remove the decoupling capacitor and watch it reboot.',
    parts: [
@@ -115,7 +115,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'Dual-core firmware running; the status LED blinks while Wi-Fi connects.', 90, {blinkingPartIds: ['statusLed']})]},
 
   // ── 05 ─ TB6612FNG motor driver ────────────────────────────────────────────
-  {id: 'tb6612', figureLabel: 'Fig. 05', name: 'TB6612FNG driver', pcbColor: '#b3262e',
+  {id: 'tb6612', currentPaths: [['motorPower', 'driverChip', 'motor'], ['motorPower', 'bulkCap'], ['standbyJumper', 'driverChip']], figureLabel: 'Fig. 05', name: 'TB6612FNG driver', pcbColor: '#b3262e',
    lessonText: 'A dual H-bridge: it reverses and speeds a DC motor using direction pins and PWM. STBY must be HIGH or the chip sleeps.',
    tryToBreakText: 'Remove the STBY jumper, or add the reversed supply leads.',
    parts: [
@@ -135,7 +135,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'The H-bridge drives the motor; PWM sets its speed.', 380, {litPartIds: ['motor']})]},
 
   // ── 06 ─ L298N motor driver ────────────────────────────────────────────────
-  {id: 'l298n', figureLabel: 'Fig. 06', name: 'L298N driver', pcbColor: '#a82424',
+  {id: 'l298n', currentPaths: [['powerTerminal', 'l298nChip', 'motor'], ['powerTerminal', 'regulator'], ['l298nChip', 'flybackDiodes']], figureLabel: 'Fig. 06', name: 'L298N driver', pcbColor: '#a82424',
    lessonText: 'An old bipolar H-bridge. It wastes about 2 V per channel as heat, so it needs a heatsink, and flyback diodes to tame motor kickback.',
    tryToBreakText: 'Skip the heatsink or the flyback diodes. Then try the 24 V supply mistake.',
    parts: [
@@ -157,7 +157,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'Motor driven. The heatsink is carrying about 2 V of waste heat per channel.', 550, {litPartIds: ['motor']})]},
 
   // ── 07 ─ A4988 stepper driver ──────────────────────────────────────────────
-  {id: 'a4988', figureLabel: 'Fig. 07', name: 'A4988 stepper driver', pcbColor: '#a82424',
+  {id: 'a4988', currentPaths: [['supplyTerminal', 'driverChip', 'stepper'], ['supplyTerminal', 'bulkCap'], ['microstepHeader', 'driverChip']], figureLabel: 'Fig. 07', name: 'A4988 stepper driver', pcbColor: '#a82424',
    lessonText: 'Moves a stepper motor one precise step per pulse. The MS pins pick the step size: finer steps are smoother and quieter.',
    tryToBreakText: 'Leave out the VMOT capacitor, or unplug the motor while the board is powered.',
    parts: [
@@ -175,7 +175,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', '1/16 microstepping: smooth and quiet motion.', 650, {litPartIds: ['stepper']})]},
 
   // ── 08 ─ PCA9685 servo board ───────────────────────────────────────────────
-  {id: 'pca9685', figureLabel: 'Fig. 08', name: 'PCA9685 servo board', pcbColor: '#2a5fb0',
+  {id: 'pca9685', currentPaths: [['i2cHeader', 'pcaChip', 'servoHeader', 'servo'], ['servoPowerTerminal', 'servoHeader'], ['i2cHeader', 'pullupResistors']], figureLabel: 'Fig. 08', name: 'PCA9685 servo board', pcbColor: '#2a5fb0',
    lessonText: 'Drives 16 servos over two I²C wires. The chip only makes the PWM signals; servos need their own V+ power.',
    tryToBreakText: 'Remove the pull-up resistors, or the servo power terminal.',
    parts: [
@@ -194,7 +194,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'Channel 0 PWM sweeps the servo horn smoothly.', 180, {litPartIds: ['servo']})]},
 
   // ── 09 ─ MPU-6050 IMU ──────────────────────────────────────────────────────
-  {id: 'mpu6050', figureLabel: 'Fig. 09', name: 'MPU-6050 IMU', pcbColor: '#5a3a8a',
+  {id: 'mpu6050', currentPaths: [['headerPins', 'regulator', 'imuChip'], ['headerPins', 'pullupResistors', 'imuChip'], ['regulator', 'decouplingCap'], ['regulator', 'powerLed']], figureLabel: 'Fig. 09', name: 'MPU-6050 IMU', pcbColor: '#5a3a8a',
    lessonText: 'A 6-axis motion sensor (accelerometer + gyroscope) read over I²C at address 0x68. It runs at 3.3 V.',
    tryToBreakText: 'Swap SDA and SCL, or remove the pull-ups, then try to find the sensor.',
    parts: [
@@ -215,7 +215,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'Streaming acceleration and rotation at 100 Hz.', 4, {litPartIds: ['powerLed']})]},
 
   // ── 10 ─ HC-SR04 ultrasonic ranger ─────────────────────────────────────────
-  {id: 'hcsr04', figureLabel: 'Fig. 10', name: 'HC-SR04 ultrasonic', pcbColor: '#1f5fa8',
+  {id: 'hcsr04', currentPaths: [['pinHeader', 'controllerChip', 'transmitter'], ['receiver', 'controllerChip'], ['crystal', 'controllerChip']], figureLabel: 'Fig. 10', name: 'HC-SR04 ultrasonic', pcbColor: '#1f5fa8',
    lessonText: 'Sends a 40 kHz ping and times the echo: distance = time × speed of sound ÷ 2. Needs 5 V and a stable clock.',
    tryToBreakText: 'Take away the receiver (it hears nothing), or add the reversed power leads.',
    parts: [
@@ -235,7 +235,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'Ping out, echo back: about 23 cm to the nearest object.', 15, {litPartIds: ['transmitter', 'receiver']})]},
 
   // ── 11 ─ 5 V relay module ──────────────────────────────────────────────────
-  {id: 'relay', figureLabel: 'Fig. 11', name: 'Relay module', pcbColor: '#1d4f91', inputs: [{id: 'signal', label: 'IN pin'}],
+  {id: 'relay', currentPaths: [['signalHeader', 'optocoupler', 'driverTransistor', 'relayCoil', 'loadTerminal'], ['relayCoil', 'flybackDiode'], ['driverTransistor', 'relayLed']], figureLabel: 'Fig. 11', name: 'Relay module', pcbColor: '#1d4f91', inputs: [{id: 'signal', label: 'IN pin'}],
    lessonText: 'A small signal drives a coil that clicks a switch for a big load. An optocoupler keeps the two sides electrically apart.',
    tryToBreakText: 'Remove the flyback diode and switch the relay on.',
    parts: [
@@ -257,7 +257,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'Click! The relay closes and connects the load.', 75, {litPartIds: ['relayLed']})]},
 
   // ── 12 ─ BME280 environment sensor ─────────────────────────────────────────
-  {id: 'bme280', figureLabel: 'Fig. 12', name: 'BME280 sensor', pcbColor: '#6b3fa0',
+  {id: 'bme280', currentPaths: [['headerPins', 'regulator', 'bmeChip'], ['headerPins', 'pullupResistors', 'bmeChip'], ['regulator', 'decouplingCap'], ['regulator', 'powerLed']], figureLabel: 'Fig. 12', name: 'BME280 sensor', pcbColor: '#6b3fa0',
    lessonText: 'Measures temperature, humidity and air pressure over I²C. The bare chip tolerates only 3.6 V, so a regulator protects it.',
    tryToBreakText: 'Feed 5 V straight to the chip with the mistake wire, or leave out the capacitor.',
    parts: [
@@ -278,7 +278,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'Reading 22.4 °C, 48 % humidity, 1013 hPa.', 4, {litPartIds: ['powerLed']})]},
 
   // ── 13 ─ servo with its own power ──────────────────────────────────────────
-  {id: 'servo', figureLabel: 'Fig. 13', name: 'Servo + external power', pcbColor: '#2f6b4f',
+  {id: 'servo', currentPaths: [['externalSupply', 'bulkCap', 'servo'], ['signalHeader', 'servo'], ['servo', 'commonGround']], figureLabel: 'Fig. 13', name: 'Servo + external power', pcbColor: '#2f6b4f',
    lessonText: 'A servo pulls big current spikes when it moves. Give it its own 5 V supply, and share the ground with the controller.',
    tryToBreakText: 'Add the mistake wire that powers the servo from the controller’s 5 V pin.',
    parts: [

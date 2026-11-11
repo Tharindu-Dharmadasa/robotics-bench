@@ -60,6 +60,8 @@ export interface BoardDefinition {
   name: string;
   pcbColor: string;
   inputs?: { id: string; label: string }[];  // user toggles, e.g. a HIGH/LOW signal
+  /** Routes the current takes, as ordered lists of part ids (source first). Drives the animated traces. */
+  currentPaths: string[][];
   parts: PartDefinition[];
   rules: FaultRule[];
   lessonText: string;

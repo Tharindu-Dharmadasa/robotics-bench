@@ -15,6 +15,8 @@ npm test        # runs the rules-engine tests
 | `src/engine/evaluateBoard.ts` | The "brain": given progress, what happens when powered? (no React) |
 | `src/engine/boardStatus.ts` | Turns progress into status text and help messages |
 | `src/store/benchStore.ts` | App state + actions (Zustand). Every action re-runs the engine |
+| `src/engine/currentFlow.ts` | Works out which copper segments carry current (normal, surge or blocked) |
+| `src/components/CurrentFlowLayer.tsx` | Draws the traces, moving current dots and the red break markers |
 | `src/render/isometric.tsx` | Fake-3D drawing maths, `IsoBox` and `IsoCylinder` |
 | `src/render/PartShape.tsx` | What each kind of part looks like (resistor bands, chip pins, motor...) |
 | `src/components/*` | UI: `PartSprite` (animated part), `BoardStage`, `Sidebar`, `StatusBar`, `ControlBar` |

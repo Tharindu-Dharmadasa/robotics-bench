@@ -6,6 +6,7 @@ import {getBoardStatus, getGuidanceMessage} from './engine/boardStatus';
 import {Sidebar} from './components/Sidebar';
 import {StatusBar} from './components/StatusBar';
 import {BoardStage} from './components/BoardStage';
+import {FlowLegend} from './components/FlowLegend';
 import {ControlBar} from './components/ControlBar';
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
             <StatusBar />
           </div>
           <BoardStage />
+          <FlowLegend />
           <ControlBar />
 
           {/* The message cross-fades whenever its text changes (key={message} tells Framer it is a "new" element). */}

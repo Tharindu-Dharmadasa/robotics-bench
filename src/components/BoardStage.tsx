@@ -1,8 +1,9 @@
 // The drawing area: the circuit board (a flat slab) plus one PartSprite per part.
 import {useBenchStore, useCurrentBoard} from '../store/benchStore';
-import {motion} from 'framer-motion';
 import {OUTLINE_STYLE, projectToScreen, toPolygonPoints} from '../render/isometric';
 import {PartSprite} from './PartSprite';
+import {CurrentFlowLayer} from './CurrentFlowLayer';
+import {getCurrentFlow} from '../engine/currentFlow';
 
 const BOARD_WIDTH = 240, BOARD_DEPTH = 150, BOARD_THICKNESS = 12;
 
@@ -10,10 +11,8 @@ export function BoardStage() {
   const {board, boardState} = useCurrentBoard();
   const {togglePart, hoveredPartId, setHoveredPart} = useBenchStore();
   const result = boardState.lastResult; // what the engine said after the latest action (null if unpowered)
-  const isCurrentFlowing = result?.status === 'RUNNING';
-  // Copper trace: a line joining the centres of the placed parts (mistake wires excluded).
-  const tracePoints = board.parts.filter((part) => boardState.placedPartIds.includes(part.id) && !part.isMistake)
-    .map((part) => { const center = projectToScreen(part.x + part.width / 2, part.y + part.depth / 2); return `${center.x},${center.y}`; }).join(' ');
+  const flow = getCurrentFlow(board, boardState); // which copper segments carry current right now
+  const currentMilliamps = result?.currentMilliamps ?? 0;
 
   // Draw back-to-front: parts farther from the viewer (smaller x + y) are drawn first,
   // so nearer parts correctly cover them. This is the "painter's algorithm".
@@ -34,11 +33,8 @@ export function BoardStage() {
         return <ellipse key={`${holeX}-${holeY}`} cx={hole.x} cy={hole.y} rx={5} ry={3} fill="var(--ink)" opacity={0.55} />;
       })}
 
-      {/* Copper trace. When the board is running, dashes slide along it to show current flowing. */}
-      <motion.polyline points={tracePoints} fill="none" stroke="#d9a441" strokeWidth={2.5} strokeLinejoin="round" initial={false}
-        opacity={isCurrentFlowing ? 1 : 0.45} strokeDasharray={isCurrentFlowing ? '6 6' : undefined}
-        animate={{strokeDashoffset: isCurrentFlowing ? [0, -12] : 0}}
-        transition={isCurrentFlowing ? {duration: 0.6, repeat: Infinity, ease: 'linear'} : {duration: 0}} />
+      {/* Printed copper traces, with animated current on the live ones. Drawn before the parts so parts sit on top. */}
+      <CurrentFlowLayer layer="traces" board={board} flow={flow} currentMilliamps={currentMilliamps} />
 
       {partsBackToFront.map((part) => {
         const isBlinking = Boolean(result?.blinkingPartIds.includes(part.id));
@@ -54,6 +50,8 @@ export function BoardStage() {
             onHoverChange={(isHovering) => setHoveredPart(isHovering ? part.id : null)} />
         );
       })}
+      {/* Red "✕" where the current stops (a part is missing or unsoldered). Drawn last so it is never hidden. */}
+      <CurrentFlowLayer layer="markers" board={board} flow={flow} currentMilliamps={currentMilliamps} />
     </svg>
   );
 }
