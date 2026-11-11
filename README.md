@@ -15,8 +15,13 @@ npm test        # runs the rules-engine tests
 | `src/engine/evaluateBoard.ts` | The "brain": given progress, what happens when powered? (no React) |
 | `src/engine/boardStatus.ts` | Turns progress into status text and help messages |
 | `src/store/benchStore.ts` | App state + actions (Zustand). Every action re-runs the engine |
-| `src/render/isometric.tsx` | Fake-3D drawing maths and the `IsoBox` shape |
+| `src/render/isometric.tsx` | Fake-3D drawing maths, `IsoBox` and `IsoCylinder` |
+| `src/render/PartShape.tsx` | What each kind of part looks like (resistor bands, chip pins, motor...) |
 | `src/components/*` | UI: `PartSprite` (animated part), `BoardStage`, `Sidebar`, `StatusBar`, `ControlBar` |
+
+## The 13 boards
+LED + resistor · Transistor switch · Arduino Uno · ESP32-S3 · TB6612FNG · L298N · A4988 · PCA9685 · MPU-6050 · HC-SR04 · Relay module · BME280 · Servo + external power.
+Red-outlined parts are **mistakes**: place one on purpose to see what breaks. "Place all" skips them.
 
 ## What happens when you click a part name
 1. `Sidebar` calls `togglePart(id)` in the store.

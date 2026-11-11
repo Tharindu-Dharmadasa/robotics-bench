@@ -32,8 +32,8 @@ export function Sidebar() {
           const isPlaced = boardState.placedPartIds.includes(part.id);
           const isBurned = boardState.burnedPartIds.includes(part.id);
           const isSoldered = boardState.solderedPartIds.includes(part.id);
-          const badgeText = isBurned ? 'burnt: click to replace' : isSoldered ? 'soldered' : isPlaced ? 'placed: needs solder' : 'click to place';
-          const badgeColor = isBurned ? 'var(--bad)' : isPlaced ? 'var(--ok)' : 'var(--accent)';
+          const badgeText = isBurned ? 'burnt: click to replace' : isSoldered ? 'soldered' : isPlaced ? 'placed: needs solder' : part.isMistake ? 'mistake: place it to see what breaks' : 'click to place';
+          const badgeColor = isBurned || (part.isMistake && !isPlaced) ? 'var(--bad)' : isPlaced ? 'var(--ok)' : 'var(--accent)';
           return (
             <motion.li key={part.id} whileHover={{x: 4}} whileTap={{scale: 0.98}}
               onClick={() => togglePart(part.id)}

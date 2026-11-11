@@ -81,7 +81,8 @@ export const useBenchStore = create<BenchStore>((set, get) => {
         : {...state, placedPartIds: [...state.placedPartIds, partId]}),
 
     placeAllParts: () => runStepByStep(
-      (state, id) => !state.placedPartIds.includes(id),
+      // "Place all" skips mistake parts: the user adds those on purpose.
+      (state, id) => !state.placedPartIds.includes(id) && !BOARDS_BY_ID[get().currentBoardId].parts.find((part) => part.id === id)?.isMistake,
       (state, id) => ({...state, placedPartIds: [...state.placedPartIds, id]})),
 
     solderAllParts: () => runStepByStep(

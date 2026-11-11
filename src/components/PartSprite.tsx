@@ -7,7 +7,8 @@
 import {motion} from 'framer-motion';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import type {PartDefinition} from '../data/types';
-import {IsoBox, projectToScreen, toPolygonPoints} from '../render/isometric';
+import {projectToScreen, toPolygonPoints} from '../render/isometric';
+import {PartShape} from '../render/PartShape';
 
 /** The three "looks" a part can have. Framer Motion tweens between them automatically. */
 const partLooks = {
@@ -32,7 +33,7 @@ export function PartSprite({part, isPlaced, isSoldered, isBurned, isGlowing, isB
   return (
     <g>
       {/* Dashed outline showing where the part goes; fades out once it is placed. */}
-      <motion.polygon initial={false} animate={{opacity: isPlaced ? 0 : 1}} fill="none" stroke="var(--accent)" strokeDasharray="5 4" strokeWidth={1.5}
+      <motion.polygon initial={false} animate={{opacity: isPlaced ? 0 : 1}} fill="none" stroke={part.isMistake ? 'var(--bad)' : 'var(--accent)'} strokeDasharray="5 4" strokeWidth={1.5}
         points={toPolygonPoints([[part.x, part.y, 0], [part.x + part.width, part.y, 0], [part.x + part.width, part.y + part.depth, 0], [part.x, part.y + part.depth, 0]])} />
 
       <Tooltip.Root>
@@ -41,7 +42,7 @@ export function PartSprite({part, isPlaced, isSoldered, isBurned, isGlowing, isB
             onClick={onClick} onMouseEnter={() => onHoverChange(true)} onMouseLeave={() => onHoverChange(false)}>
             {/* The part's body. Burned parts turn grey/dark; hovered parts get an orange glow. */}
             <g className={isBurned ? 'grayscale brightness-[.35]' : ''} style={isHovered ? {filter: 'drop-shadow(0 0 3px var(--accent))'} : undefined}>
-              <IsoBox x={part.x} y={part.y} width={part.width} depth={part.depth} height={part.height} color={part.color} />
+              <PartShape part={part} isActive={isGlowing} />
             </g>
 
             {/* Light glow for LEDs: fades in when lit, flashes on/off when blinking. */}

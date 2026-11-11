@@ -19,15 +19,24 @@ export type Condition =
   | { allOf: Condition[] }    // every condition is true (empty list = always true)
   | { anyOf: Condition[] };   // at least one condition is true
 
+/** What a part looks like. Each kind has its own drawing code in render/PartShape.tsx. */
+export type PartKind = 'resistor' | 'led' | 'chip' | 'capacitor' | 'header' | 'terminal' | 'heatsink' | 'relay' | 'motor' | 'connector' | 'eye' | 'block';
+
 /** One physical component (resistor, LED, chip...) with its place on the board. */
 export interface PartDefinition {
   id: string;            // unique inside a board, used by rules, e.g. "baseResistor"
   name: string;          // shown to the user
   description: string;   // one-line explanation of the part's job
+  kind: PartKind;
   x: number; y: number;  // position on the board surface
   width: number; depth: number; height: number; // size of the 3D box we draw
   color: string;
   glowColor?: string;    // only for parts that emit light (LEDs)
+  bands?: string[];      // resistor colour-band colours
+  pinCount?: number;     // pins on a chip / header, screws on a terminal
+  hasWindow?: boolean;   // draws a dark opening (USB ports)
+  /** A "mistake" part (wrong wire, reversed supply...). "Place all" skips it: the user adds it on purpose to see what breaks. */
+  isMistake?: boolean;
 }
 
 /** "If this condition matches, this is what happens." The FIRST matching rule wins. */
