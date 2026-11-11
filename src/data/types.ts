@@ -62,6 +62,8 @@ export interface BoardDefinition {
   inputs?: { id: string; label: string }[];  // user toggles, e.g. a HIGH/LOW signal
   /** Routes the current takes, as ordered lists of part ids (source first). Drives the animated traces. */
   currentPaths: string[][];
+  /** 'perfboard' = a hobby board with a grid of copper pads (3D view). Others look like a plain PCB. */
+  pcbStyle?: 'perfboard';
   parts: PartDefinition[];
   rules: FaultRule[];
   lessonText: string;

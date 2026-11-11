@@ -41,7 +41,7 @@ const DARK = '#2b2b2b', RED_WIRE = {color: '#e03a2f', width: 36, depth: 8, heigh
 
 export const BOARDS: BoardDefinition[] = [
   // ── 01 ─ the simplest circuit ──────────────────────────────────────────────
-  {id: 'led', currentPaths: [['power', 'resistor', 'led']], figureLabel: 'Fig. 01', name: 'LED + resistor', pcbColor: '#2f6b4f',
+  {id: 'led', pcbStyle: 'perfboard', currentPaths: [['power', 'resistor', 'led']], figureLabel: 'Fig. 01', name: 'LED + resistor', pcbColor: '#2f6b4f',
    lessonText: 'A power source, a current limiter and a light. The resistor decides how much current the LED sees.',
    tryToBreakText: 'Power it without the resistor, then replace the burnt LED and try again.',
    parts: [
@@ -55,7 +55,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'LED lit. The resistor limits current to about 14 mA.', 14, {litPartIds: ['led']})]},
 
   // ── 02 ─ a transistor as an electronic switch ──────────────────────────────
-  {id: 'transistor', currentPaths: [['power', 'baseResistor', 'transistor'], ['power', 'ledResistor', 'led', 'transistor']], figureLabel: 'Fig. 02', name: 'Transistor switch', pcbColor: '#2f6b4f', inputs: [{id: 'signal', label: 'Signal'}],
+  {id: 'transistor', pcbStyle: 'perfboard', currentPaths: [['power', 'baseResistor', 'transistor'], ['power', 'ledResistor', 'led', 'transistor']], figureLabel: 'Fig. 02', name: 'Transistor switch', pcbColor: '#2f6b4f', inputs: [{id: 'signal', label: 'Signal'}],
    lessonText: 'A tiny base current lets a transistor switch a bigger load current, the way a microcontroller pin drives bigger loads.',
    tryToBreakText: 'Set the signal HIGH with no base resistor, or remove the LED resistor.',
    parts: [
@@ -278,7 +278,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'Reading 22.4 °C, 48 % humidity, 1013 hPa.', 4, {litPartIds: ['powerLed']})]},
 
   // ── 13 ─ servo with its own power ──────────────────────────────────────────
-  {id: 'servo', currentPaths: [['externalSupply', 'bulkCap', 'servo'], ['signalHeader', 'servo'], ['servo', 'commonGround']], figureLabel: 'Fig. 13', name: 'Servo + external power', pcbColor: '#2f6b4f',
+  {id: 'servo', pcbStyle: 'perfboard', currentPaths: [['externalSupply', 'bulkCap', 'servo'], ['signalHeader', 'servo'], ['servo', 'commonGround']], figureLabel: 'Fig. 13', name: 'Servo + external power', pcbColor: '#2f6b4f',
    lessonText: 'A servo pulls big current spikes when it moves. Give it its own 5 V supply, and share the ground with the controller.',
    tryToBreakText: 'Add the mistake wire that powers the servo from the controller’s 5 V pin.',
    parts: [
