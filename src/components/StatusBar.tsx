@@ -17,7 +17,10 @@ export function StatusBar() {
 
   const readouts: [label: string, value: string | number, color?: string][] = [
     ["STATUS", status, statusColor],
-    ["PARTS", `${boardState.placedPartIds.length}/${board.parts.length}`],
+    [
+      "PARTS",
+      `${boardState.placedPartIds.filter((id) => !board.parts.find((part) => part.id === id)?.isMistake).length}/${board.parts.filter((part) => !part.isMistake).length}`,
+    ],
     ["TO SOLDER", jointsLeftToSolder],
     ["CURRENT", `${boardState.lastResult?.currentMilliamps ?? 0} mA`],
   ];

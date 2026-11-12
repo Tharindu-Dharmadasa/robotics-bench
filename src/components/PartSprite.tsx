@@ -7,7 +7,8 @@
 import { motion } from "framer-motion";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { PartDefinition } from "../data/types";
-import { IsoBox, projectToScreen, toPolygonPoints } from "../render/isometric";
+import { projectToScreen, toPolygonPoints } from "../render/isometric";
+import { PartShape } from "../render/PartShape";
 
 /** The three "looks" a part can have. Framer Motion tweens between them automatically. */
 const partLooks = {
@@ -67,7 +68,7 @@ export function PartSprite({
         initial={false}
         animate={{ opacity: isPlaced ? 0 : 1 }}
         fill="none"
-        stroke="var(--accent)"
+        stroke={part.isMistake ? "var(--bad)" : "var(--accent)"}
         strokeDasharray="5 4"
         strokeWidth={1.5}
         points={toPolygonPoints([
@@ -98,14 +99,7 @@ export function PartSprite({
                   : undefined
               }
             >
-              <IsoBox
-                x={part.x}
-                y={part.y}
-                width={part.width}
-                depth={part.depth}
-                height={part.height}
-                color={part.color}
-              />
+              <PartShape part={part} isActive={isGlowing} />
             </g>
 
             {/* Light glow for LEDs: fades in when lit, flashes on/off when blinking. */}

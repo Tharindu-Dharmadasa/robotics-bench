@@ -61,12 +61,15 @@ export function Sidebar() {
               ? "soldered"
               : isPlaced
                 ? "placed: needs solder"
-                : "click to place";
-          const badgeColor = isBurned
-            ? "var(--bad)"
-            : isPlaced
-              ? "var(--ok)"
-              : "var(--accent)";
+                : part.isMistake
+                  ? "mistake: place it to see what breaks"
+                  : "click to place";
+          const badgeColor =
+            isBurned || (part.isMistake && !isPlaced)
+              ? "var(--bad)"
+              : isPlaced
+                ? "var(--ok)"
+                : "var(--accent)";
           return (
             <motion.li
               key={part.id}
