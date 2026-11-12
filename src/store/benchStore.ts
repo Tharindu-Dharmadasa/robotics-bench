@@ -20,6 +20,8 @@ interface BenchStore {
   boardStates: Record<string, BoardState>;   // progress is remembered separately for each board
   hoveredPartId: string | null;              // lets the parts bin and the stage highlight the same part
   isBusy: boolean;                           // true while a step-by-step action is running
+  uploadedBoardIds: string[];                // boards whose sketch has been uploaded (it survives power-off, like flash memory)
+  uploadProgress: number | null;             // 0 to 1 while uploading, otherwise null
 
   selectBoard: (boardId: string) => void;
   togglePart: (partId: string) => void;      // place it, or remove it if already placed
@@ -28,6 +30,7 @@ interface BenchStore {
   togglePower: () => void;
   toggleInput: (inputId: string) => void;
   resetBoard: () => void;
+  uploadSketch: () => Promise<void>;
   setHoveredPart: (partId: string | null) => void;
 }
 
@@ -67,7 +70,7 @@ export const useBenchStore = create<BenchStore>((set, get) => {
   };
 
   return {
-    currentBoardId: BOARDS[0].id, boardStates: {}, hoveredPartId: null, isBusy: false,
+    currentBoardId: BOARDS[0].id, boardStates: {}, hoveredPartId: null, isBusy: false, uploadedBoardIds: [], uploadProgress: null,
 
     selectBoard: (boardId) => set({currentBoardId: boardId}),
 
@@ -91,7 +94,18 @@ export const useBenchStore = create<BenchStore>((set, get) => {
 
     togglePower: () => updateCurrentBoard((state) => ({...state, isPowered: !state.isPowered})),
     toggleInput: (inputId) => updateCurrentBoard((state) => ({...state, inputValues: {...state.inputValues, [inputId]: !state.inputValues[inputId]}})),
-    resetBoard: () => updateCurrentBoard(() => createEmptyBoardState()),
+    resetBoard: () => {
+      set((store) => ({uploadedBoardIds: store.uploadedBoardIds.filter((id) => id !== store.currentBoardId)})); // a reset wipes the sketch too
+      updateCurrentBoard(() => createEmptyBoardState());
+    },
+
+    /** Fake an upload: the progress bar fills in 10 steps, then the board counts as programmed. Needs power and a sketch. */
+    uploadSketch: async () => {
+      const boardId = get().currentBoardId;
+      if (get().uploadProgress !== null || !BOARDS_BY_ID[boardId].sketch || !get().boardStates[boardId]?.isPowered) return;
+      for (let step = 1; step <= 10; step++) { set({uploadProgress: step / 10}); await wait(180); }
+      set((store) => ({uploadProgress: null, uploadedBoardIds: [...new Set([...store.uploadedBoardIds, boardId])]}));
+    },
     setHoveredPart: (partId) => set({hoveredPartId: partId}),
   };
 });

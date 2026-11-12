@@ -15,6 +15,8 @@ npm test        # runs the rules-engine tests
 | `src/engine/evaluateBoard.ts` | The "brain": given progress, what happens when powered? (no React) |
 | `src/engine/boardStatus.ts` | Turns progress into status text and help messages |
 | `src/store/benchStore.ts` | App state + actions (Zustand). Every action re-runs the engine |
+| `src/engine/serialScript.ts` | Decides what the serial monitor should print (pure, tested) |
+| `src/components/CodePanel.tsx`, `SerialMonitor.tsx` | Example code + simulated upload, and the serial monitor |
 | `src/engine/currentFlow.ts` | Works out which copper segments carry current (normal, surge or blocked) |
 | `src/components/CurrentFlowLayer.tsx` | Draws the traces, moving current dots and the red break markers |
 | `src/components3d/*` | The 3D view (React Three Fiber): `Stage3D` (camera, light), `Board3D` (PCB, traces, current), `Part3D` (spring animation), `PartModel` (each part's shape) |

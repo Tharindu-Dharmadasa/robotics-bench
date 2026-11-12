@@ -58,6 +58,19 @@ export const BOARDS: BoardDefinition[] = [
   {id: 'transistor', pcbStyle: 'perfboard', currentPaths: [['power', 'baseResistor', 'transistor'], ['power', 'ledResistor', 'led', 'transistor']], figureLabel: 'Fig. 02', name: 'Transistor switch', pcbColor: '#2f6b4f', inputs: [{id: 'signal', label: 'Signal'}],
    lessonText: 'A tiny base current lets a transistor switch a bigger load current, the way a microcontroller pin drives bigger loads.',
    tryToBreakText: 'Set the signal HIGH with no base resistor, or remove the LED resistor.',
+   sketch: `const int BASE_PIN = 7;   // controller pin wired to the base resistor
+
+void setup() {
+  pinMode(BASE_PIN, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(BASE_PIN, HIGH);  // transistor on, LED on
+  delay(500);
+  digitalWrite(BASE_PIN, LOW);   // transistor off, LED off
+  delay(500);
+}`,
+   serialOutput: ['Base HIGH: transistor on, LED on', 'Base LOW: transistor off, LED off'],
    parts: [
      part('header', 'power', '5 V header', 'brings power in', [14, 10], {width: 30, pinCount: 2}),
      part('resistor', 'baseResistor', '1 kΩ base resistor', 'protects the transistor base', [70, 30], {bands: KILOHM_1}),
@@ -77,6 +90,20 @@ export const BOARDS: BoardDefinition[] = [
   {id: 'uno', currentPaths: [['usbPort', 'regulator', 'microcontroller', 'pin13Resistor', 'pin13Led'], ['crystal', 'microcontroller'], ['regulator', 'decouplingCap']], figureLabel: 'Fig. 03', name: 'Arduino Uno R3', pcbColor: '#2b5aa8',
    lessonText: 'An ATmega328P needs power, a clean 5 V rail and a 16 MHz clock before it runs your sketch. Pin 13 drives an LED.',
    tryToBreakText: 'Remove the crystal or the regulator, then power up. Try the LED without its resistor.',
+   sketch: `void setup() {
+  pinMode(13, OUTPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+  digitalWrite(13, HIGH);
+  Serial.println("LED on");
+  delay(500);
+  digitalWrite(13, LOW);
+  Serial.println("LED off");
+  delay(500);
+}`,
+   serialOutput: ['LED on', 'LED off'],
    parts: [
      part('connector', 'usbPort', 'USB-B connector', 'power and serial', [8, 10], {width: 34, depth: 40, height: 22}),
      part('block', 'regulator', '5 V regulator', 'makes a clean 5 V rail', [70, 12], {width: 26, depth: 22, height: 14, color: DARK}),
@@ -99,6 +126,20 @@ export const BOARDS: BoardDefinition[] = [
   {id: 'esp32', currentPaths: [['usbPort', 'regulator', 'espModule', 'statusLed'], ['regulator', 'decouplingCap']], figureLabel: 'Fig. 04', name: 'ESP32-S3 DevKit', pcbColor: '#1f3a2e',
    lessonText: 'Two cores, Wi-Fi and Bluetooth, but every GPIO pin is 3.3 V only. A 3.3 V regulator feeds the chip from USB.',
    tryToBreakText: 'Solder the 5 V jumper onto a GPIO pin. Or remove the decoupling capacitor and watch it reboot.',
+   sketch: `#include <WiFi.h>
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin("MyNetwork", "password");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println(WiFi.localIP());
+}
+
+void loop() {}`,
+   serialOutput: ['Connecting to Wi-Fi...', 'Connected! IP 192.168.1.42', 'Signal strength: -58 dBm'],
    parts: [
      part('connector', 'usbPort', 'USB-C connector', 'power and programming', [8, 56], {width: 26, depth: 30, height: 10}),
      part('block', 'regulator', '3.3 V regulator', 'powers the chip', [52, 14], {width: 20, depth: 16, height: 10, color: DARK}),
@@ -118,6 +159,21 @@ export const BOARDS: BoardDefinition[] = [
   {id: 'tb6612', currentPaths: [['motorPower', 'driverChip', 'motor'], ['motorPower', 'bulkCap'], ['standbyJumper', 'driverChip']], figureLabel: 'Fig. 05', name: 'TB6612FNG driver', pcbColor: '#b3262e',
    lessonText: 'A dual H-bridge: it reverses and speeds a DC motor using direction pins and PWM. STBY must be HIGH or the chip sleeps.',
    tryToBreakText: 'Remove the STBY jumper, or add the reversed supply leads.',
+   sketch: `const int AIN1 = 7, AIN2 = 8, PWMA = 9, STBY = 10;
+
+void setup() {
+  pinMode(AIN1, OUTPUT);
+  pinMode(AIN2, OUTPUT);
+  pinMode(STBY, OUTPUT);
+  digitalWrite(STBY, HIGH);   // wake the driver
+}
+
+void loop() {
+  digitalWrite(AIN1, HIGH);   // direction: forward
+  digitalWrite(AIN2, LOW);
+  analogWrite(PWMA, 200);     // speed: 200 out of 255
+}`,
+   serialOutput: ['Motor A: forward, speed 200/255', 'Motor A: forward, speed 200/255'],
    parts: [
      part('terminal', 'motorPower', 'VM supply terminal', 'motor power in', [10, 20]),
      part('chip', 'driverChip', 'TB6612FNG', 'dual H-bridge driver', [80, 50], {width: 50, depth: 26}),
@@ -138,6 +194,20 @@ export const BOARDS: BoardDefinition[] = [
   {id: 'l298n', currentPaths: [['powerTerminal', 'l298nChip', 'motor'], ['powerTerminal', 'regulator'], ['l298nChip', 'flybackDiodes']], figureLabel: 'Fig. 06', name: 'L298N driver', pcbColor: '#a82424',
    lessonText: 'An old bipolar H-bridge. It wastes about 2 V per channel as heat, so it needs a heatsink, and flyback diodes to tame motor kickback.',
    tryToBreakText: 'Skip the heatsink or the flyback diodes. Then try the 24 V supply mistake.',
+   sketch: `const int ENA = 9, IN1 = 7, IN2 = 8;
+
+void setup() {
+  pinMode(ENA, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(IN1, HIGH);    // direction: forward
+  digitalWrite(IN2, LOW);
+  analogWrite(ENA, 180);      // speed: 180 out of 255
+}`,
+   serialOutput: ['Channel A: forward, speed 180/255', 'Heatsink carrying about 2 V of waste heat'],
    parts: [
      part('terminal', 'powerTerminal', '12 V power terminal', 'motor supply in', [8, 20], {pinCount: 3}),
      part('chip', 'l298nChip', 'L298N', 'dual H-bridge', [90, 28], {width: 40, depth: 20, height: 16, pinCount: 5}),
@@ -160,6 +230,21 @@ export const BOARDS: BoardDefinition[] = [
   {id: 'a4988', currentPaths: [['supplyTerminal', 'driverChip', 'stepper'], ['supplyTerminal', 'bulkCap'], ['microstepHeader', 'driverChip']], figureLabel: 'Fig. 07', name: 'A4988 stepper driver', pcbColor: '#a82424',
    lessonText: 'Moves a stepper motor one precise step per pulse. The MS pins pick the step size: finer steps are smoother and quieter.',
    tryToBreakText: 'Leave out the VMOT capacitor, or unplug the motor while the board is powered.',
+   sketch: `const int STEP = 3, DIR = 4;
+
+void setup() {
+  pinMode(STEP, OUTPUT);
+  pinMode(DIR, OUTPUT);
+  digitalWrite(DIR, HIGH);        // turn clockwise
+}
+
+void loop() {
+  digitalWrite(STEP, HIGH);
+  delayMicroseconds(800);
+  digitalWrite(STEP, LOW);        // one step per pulse
+  delayMicroseconds(800);
+}`,
+   serialOutput: ['Stepping: 1/16 microstep, 625 steps/s', 'Position: +400 steps'],
    parts: [
      part('terminal', 'supplyTerminal', 'VMOT supply terminal', '12 V motor power', [8, 20]),
      part('capacitor', 'bulkCap', '100 µF capacitor', 'protects VMOT from spikes', [30, 70]),
@@ -178,6 +263,20 @@ export const BOARDS: BoardDefinition[] = [
   {id: 'pca9685', currentPaths: [['i2cHeader', 'pcaChip', 'servoHeader', 'servo'], ['servoPowerTerminal', 'servoHeader'], ['i2cHeader', 'pullupResistors']], figureLabel: 'Fig. 08', name: 'PCA9685 servo board', pcbColor: '#2a5fb0',
    lessonText: 'Drives 16 servos over two I²C wires. The chip only makes the PWM signals; servos need their own V+ power.',
    tryToBreakText: 'Remove the pull-up resistors, or the servo power terminal.',
+   sketch: `#include <Adafruit_PWMServoDriver.h>
+
+Adafruit_PWMServoDriver pwm;
+
+void setup() {
+  pwm.begin();
+  pwm.setPWMFreq(50);               // servos expect 50 Hz
+}
+
+void loop() {
+  pwm.setPWM(0, 0, 150); delay(600);   // channel 0 to 0 degrees
+  pwm.setPWM(0, 0, 600); delay(600);   // channel 0 to 180 degrees
+}`,
+   serialOutput: ['I2C: found PCA9685 at 0x40', 'Channel 0 -> 0 degrees', 'Channel 0 -> 180 degrees'],
    parts: [
      part('header', 'i2cHeader', 'I²C header', 'SDA / SCL / power from the controller', [8, 20], {width: 36, pinCount: 4}),
      part('chip', 'pcaChip', 'PCA9685', '16-channel PWM chip', [70, 40], {width: 50, depth: 24}),
@@ -197,6 +296,22 @@ export const BOARDS: BoardDefinition[] = [
   {id: 'mpu6050', currentPaths: [['headerPins', 'regulator', 'imuChip'], ['headerPins', 'pullupResistors', 'imuChip'], ['regulator', 'decouplingCap'], ['regulator', 'powerLed']], figureLabel: 'Fig. 09', name: 'MPU-6050 IMU', pcbColor: '#5a3a8a',
    lessonText: 'A 6-axis motion sensor (accelerometer + gyroscope) read over I²C at address 0x68. It runs at 3.3 V.',
    tryToBreakText: 'Swap SDA and SCL, or remove the pull-ups, then try to find the sensor.',
+   sketch: `#include <Adafruit_MPU6050.h>
+
+Adafruit_MPU6050 mpu;
+
+void setup() {
+  Serial.begin(115200);
+  mpu.begin();                      // finds the sensor at 0x68
+}
+
+void loop() {
+  sensors_event_t accel, gyro, temp;
+  mpu.getEvent(&accel, &gyro, &temp);
+  Serial.println(accel.acceleration.z);
+  delay(100);
+}`,
+   serialOutput: ['I2C: found MPU-6050 at 0x68', 'accel z = 9.81 m/s2', 'accel z = 9.79 m/s2', 'gyro x = 0.02 rad/s'],
    parts: [
      part('header', 'headerPins', 'VCC / GND / SCL / SDA header', 'connects to the controller', [20, 112], {width: 60, pinCount: 8}),
      part('block', 'regulator', '3.3 V regulator', 'powers the sensor', [40, 30], {width: 20, depth: 16, height: 10, color: DARK}),
@@ -218,6 +333,23 @@ export const BOARDS: BoardDefinition[] = [
   {id: 'hcsr04', currentPaths: [['pinHeader', 'controllerChip', 'transmitter'], ['receiver', 'controllerChip'], ['crystal', 'controllerChip']], figureLabel: 'Fig. 10', name: 'HC-SR04 ultrasonic', pcbColor: '#1f5fa8',
    lessonText: 'Sends a 40 kHz ping and times the echo: distance = time × speed of sound ÷ 2. Needs 5 V and a stable clock.',
    tryToBreakText: 'Take away the receiver (it hears nothing), or add the reversed power leads.',
+   sketch: `const int TRIG = 9, ECHO = 10;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
+}
+
+void loop() {
+  digitalWrite(TRIG, HIGH);         // send a 10 microsecond ping
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
+  long us = pulseIn(ECHO, HIGH);    // time until the echo returns
+  Serial.println(us * 0.0343 / 2);  // distance in cm
+  delay(200);
+}`,
+   serialOutput: ['Distance: 23.4 cm', 'Distance: 23.2 cm', 'Distance: 23.5 cm'],
    parts: [
      part('header', 'pinHeader', 'VCC / TRIG / ECHO / GND', 'connects to the controller', [90, 128], {width: 40, pinCount: 4}),
      part('eye', 'transmitter', 'Transmitter (T)', 'sends the ping', [30, 40], {width: 40, depth: 40, height: 20, glowColor: '#6ec5ff'}),
@@ -238,6 +370,19 @@ export const BOARDS: BoardDefinition[] = [
   {id: 'relay', currentPaths: [['signalHeader', 'optocoupler', 'driverTransistor', 'relayCoil', 'loadTerminal'], ['relayCoil', 'flybackDiode'], ['driverTransistor', 'relayLed']], figureLabel: 'Fig. 11', name: 'Relay module', pcbColor: '#1d4f91', inputs: [{id: 'signal', label: 'IN pin'}],
    lessonText: 'A small signal drives a coil that clicks a switch for a big load. An optocoupler keeps the two sides electrically apart.',
    tryToBreakText: 'Remove the flyback diode and switch the relay on.',
+   sketch: `const int RELAY_IN = 7;
+
+void setup() {
+  pinMode(RELAY_IN, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(RELAY_IN, HIGH);   // coil on: relay clicks closed
+  delay(2000);
+  digitalWrite(RELAY_IN, LOW);    // coil off: relay clicks open
+  delay(2000);
+}`,
+   serialOutput: ['Relay: ON (click)', 'Relay: OFF (click)'],
    parts: [
      part('header', 'signalHeader', 'VCC / GND / IN header', 'control connection', [8, 20], {width: 30, pinCount: 3}),
      part('chip', 'optocoupler', 'PC817 optocoupler', 'isolates the control side', [58, 20], {width: 28, depth: 18, pinCount: 2}),
@@ -260,6 +405,20 @@ export const BOARDS: BoardDefinition[] = [
   {id: 'bme280', currentPaths: [['headerPins', 'regulator', 'bmeChip'], ['headerPins', 'pullupResistors', 'bmeChip'], ['regulator', 'decouplingCap'], ['regulator', 'powerLed']], figureLabel: 'Fig. 12', name: 'BME280 sensor', pcbColor: '#6b3fa0',
    lessonText: 'Measures temperature, humidity and air pressure over I²C. The bare chip tolerates only 3.6 V, so a regulator protects it.',
    tryToBreakText: 'Feed 5 V straight to the chip with the mistake wire, or leave out the capacitor.',
+   sketch: `#include <Adafruit_BME280.h>
+
+Adafruit_BME280 bme;
+
+void setup() {
+  Serial.begin(115200);
+  bme.begin(0x76);                  // I2C address of the sensor
+}
+
+void loop() {
+  Serial.println(bme.readTemperature());
+  delay(1000);
+}`,
+   serialOutput: ['I2C: found BME280 at 0x76', 'Temperature: 22.4 C', 'Humidity: 48 %', 'Pressure: 1013 hPa'],
    parts: [
      part('header', 'headerPins', 'VIN / GND / SCL / SDA header', 'connects to the controller', [20, 112], {width: 48, pinCount: 6}),
      part('block', 'regulator', '3.3 V regulator', 'protects the chip', [40, 30], {width: 20, depth: 16, height: 10, color: DARK}),
@@ -281,6 +440,19 @@ export const BOARDS: BoardDefinition[] = [
   {id: 'servo', pcbStyle: 'perfboard', currentPaths: [['externalSupply', 'bulkCap', 'servo'], ['signalHeader', 'servo'], ['servo', 'commonGround']], figureLabel: 'Fig. 13', name: 'Servo + external power', pcbColor: '#2f6b4f',
    lessonText: 'A servo pulls big current spikes when it moves. Give it its own 5 V supply, and share the ground with the controller.',
    tryToBreakText: 'Add the mistake wire that powers the servo from the controller’s 5 V pin.',
+   sketch: `#include <Servo.h>
+
+Servo servo;
+
+void setup() {
+  servo.attach(9);                  // PWM signal pin
+}
+
+void loop() {
+  for (int angle = 0; angle <= 180; angle += 2) { servo.write(angle); delay(15); }
+  for (int angle = 180; angle >= 0; angle -= 2) { servo.write(angle); delay(15); }
+}`,
+   serialOutput: ['Servo angle: 0 degrees', 'Servo angle: 90 degrees', 'Servo angle: 180 degrees', 'Servo angle: 90 degrees'],
    parts: [
      part('terminal', 'externalSupply', 'External 5 V supply', 'dedicated servo power', [8, 20]),
      part('capacitor', 'bulkCap', '470 µF capacitor', 'covers servo current spikes', [10, 70], {width: 22, depth: 22, height: 26}),

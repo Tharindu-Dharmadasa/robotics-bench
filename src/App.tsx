@@ -10,6 +10,8 @@ import {BoardStage} from './components/BoardStage';
 import {FlowLegend} from './components/FlowLegend';
 import {PartsTray} from './components/PartsTray';
 import {ControlBar} from './components/ControlBar';
+import {CodePanel} from './components/CodePanel';
+import {SerialMonitor} from './components/SerialMonitor';
 // The 3D scene is loaded only when needed, so the 2D app stays light.
 const Stage3D = lazy(() => import('./components3d/Stage3D'));
 
@@ -64,6 +66,8 @@ export default function App() {
               </section>
             ))}
           </div>
+          {/* The learning layer: example code with an Upload button, and the serial monitor it prints to. */}
+          <div className="grid gap-3 md:grid-cols-2"><CodePanel /><SerialMonitor /></div>
         </main>
       </div>
     </Tooltip.Provider>

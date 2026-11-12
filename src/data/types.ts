@@ -68,6 +68,10 @@ export interface BoardDefinition {
   rules: FaultRule[];
   lessonText: string;
   tryToBreakText: string;
+  /** Example Arduino code shown in the code panel. Boards with no microcontroller (like Fig. 01) have none. */
+  sketch?: string;
+  /** Lines the sketch prints to the serial monitor, over and over, while the board is running. */
+  serialOutput?: string[];
 }
 
 /** The user's progress on ONE board. This is the only thing that changes while using the app. */
