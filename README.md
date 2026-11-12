@@ -21,7 +21,7 @@ npm test        # runs the rules-engine tests
 | `src/render3d/scene.ts` | Converts board coordinates to 3D scene coordinates |
 | `src/render/isometric.tsx` | Fake-3D drawing maths, `IsoBox` and `IsoCylinder` |
 | `src/render/PartShape.tsx` | What each kind of part looks like (resistor bands, chip pins, motor...) |
-| `src/components/*` | UI: `PartSprite` (animated part), `BoardStage`, `Sidebar`, `StatusBar`, `ControlBar` |
+| `src/components/*` | UI: `PartSprite` (animated part), `BoardStage`, `Sidebar` (board list), `PartsTray` (the parts, beside the board), `StatusBar`, `ControlBar` |
 
 ## The 13 boards
 LED + resistor · Transistor switch · Arduino Uno · ESP32-S3 · TB6612FNG · L298N · A4988 · PCA9685 · MPU-6050 · HC-SR04 · Relay module · BME280 · Servo + external power.

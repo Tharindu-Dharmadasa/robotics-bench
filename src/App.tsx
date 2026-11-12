@@ -7,10 +7,11 @@ import {getBoardStatus, getGuidanceMessage} from './engine/boardStatus';
 import {Sidebar} from './components/Sidebar';
 import {StatusBar} from './components/StatusBar';
 import {BoardStage} from './components/BoardStage';
+import {FlowLegend} from './components/FlowLegend';
+import {PartsTray} from './components/PartsTray';
+import {ControlBar} from './components/ControlBar';
 // The 3D scene is loaded only when needed, so the 2D app stays light.
 const Stage3D = lazy(() => import('./components3d/Stage3D'));
-import {FlowLegend} from './components/FlowLegend';
-import {ControlBar} from './components/ControlBar';
 
 export default function App() {
   const {board, boardState} = useCurrentBoard();
@@ -22,24 +23,33 @@ export default function App() {
   return (
     // Tooltip.Provider is required once at the top by Radix for all tooltips below.
     <Tooltip.Provider delayDuration={120}>
-      <div className="mx-auto grid min-h-screen max-w-6xl gap-5 p-4 md:grid-cols-[250px_1fr]">
+      <div className="mx-auto grid min-h-screen max-w-7xl gap-5 p-4 md:grid-cols-[220px_1fr]">
         <Sidebar />
         <main className="space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div><small className="opacity-60">{board.figureLabel}</small><h2 className="text-xl font-bold">{board.name}</h2></div>
             <StatusBar />
           </div>
-          <div className="flex gap-2 text-xs">
-            {(['3d', '2d'] as const).map((mode) => (
-              <button key={mode} onClick={() => setView(mode)} className="rounded-md border border-[var(--ink)] px-3 py-1 uppercase"
-                style={view === mode ? {background: 'var(--ink)', color: 'var(--paper)'} : undefined}>{mode}</button>
-            ))}
+
+          {/* THE WORKBENCH. A CSS grid with two columns on wide screens (xl): the board and its controls on the left,
+              the parts tray on the right, spanning all four rows. On narrower screens it is a single column in DOM order:
+              toggle, board, legend, TRAY, controls, so the parts are always directly under the board. */}
+          <div className="grid gap-3 xl:grid-cols-[1fr_280px]">
+            <div id="stage-area" className="flex scroll-mt-4 gap-2 text-xs xl:col-start-1">
+              {(['3d', '2d'] as const).map((mode) => (
+                <button key={mode} onClick={() => setView(mode)} className="rounded-md border border-[var(--ink)] px-3 py-1 uppercase"
+                  style={view === mode ? {background: 'var(--ink)', color: 'var(--paper)'} : undefined}>{mode}</button>
+              ))}
+            </div>
+            <div className="xl:col-start-1">
+              <Suspense fallback={<div className="grid h-[480px] place-items-center rounded-xl border border-[var(--line)]">Loading 3D…</div>}>
+                {view === '3d' ? <Stage3D /> : <BoardStage />}
+              </Suspense>
+            </div>
+            <div className="xl:col-start-1"><FlowLegend /></div>
+            <PartsTray />
+            <div className="xl:col-start-1"><ControlBar /></div>
           </div>
-          <Suspense fallback={<div className="grid h-[480px] place-items-center rounded-xl border border-[var(--line)]">Loading 3D…</div>}>
-            {view === '3d' ? <Stage3D /> : <BoardStage />}
-          </Suspense>
-          <FlowLegend />
-          <ControlBar />
 
           {/* The message cross-fades whenever its text changes (key={message} tells Framer it is a "new" element). */}
           <AnimatePresence mode="wait">
