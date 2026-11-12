@@ -2,7 +2,7 @@
 // What each kind of part LOOKS like in 3D, built from boxes, cylinders and spheres.
 // The model is centred on (0, 0, 0) with its base at y = 0; Part3D places it.
 // ─────────────────────────────────────────────────────────────────────────────
-import {useRef} from 'react';
+import {createContext, useContext, useRef} from 'react';
 import {useFrame} from '@react-three/fiber';
 import type {Group, MeshPhysicalMaterial, PointLight} from 'three';
 import type {PartDefinition} from '../data/types';
@@ -10,6 +10,8 @@ import {UNIT} from '../render3d/scene';
 
 export const METAL = '#c9ccd2', GOLD = '#d8b04a';
 type Vec3 = [number, number, number];
+/** How strongly lit parts glow: 0 = off, 1 = rated brightness, above 1 = over-driven. Set by Part3D from the real current. */
+export const BrightnessContext = createContext(1);
 
 function Box({size, position = [0, 0, 0], color, metal = false}: {size: Vec3; position?: Vec3; color: string; metal?: boolean}) {
   return (
@@ -32,10 +34,11 @@ function Cyl({radius, height, position = [0, 0, 0], color, metal = false}: {radi
 /** Glass-like material that lights up (and blinks) when its part is lit. */
 function GlowMaterial({color, isLit, isBlinking}: {color: string; isLit: boolean; isBlinking: boolean}) {
   const material = useRef<MeshPhysicalMaterial>(null);
+  const brightness = useContext(BrightnessContext);
   useFrame(({clock}) => {
     if (!material.current) return;
     const isOn = isLit && (!isBlinking || Math.floor(clock.elapsedTime * 2) % 2 === 0);
-    material.current.emissiveIntensity = isOn ? 2.4 : 0;
+    material.current.emissiveIntensity = isOn ? 2.4 * brightness : 0;
   });
   return <meshPhysicalMaterial ref={material} color={color} emissive={color} emissiveIntensity={0} transparent opacity={0.92} roughness={0.15} />;
 }
@@ -43,10 +46,11 @@ function GlowMaterial({color, isLit, isBlinking}: {color: string; isLit: boolean
 /** A real light source next to a glowing LED, so it lights the board around it. */
 function GlowLight({color, isLit, isBlinking, position}: {color: string; isLit: boolean; isBlinking: boolean; position: Vec3}) {
   const light = useRef<PointLight>(null);
+  const brightness = useContext(BrightnessContext);
   useFrame(({clock}) => {
     if (!light.current) return;
     const isOn = isLit && (!isBlinking || Math.floor(clock.elapsedTime * 2) % 2 === 0);
-    light.current.intensity = isOn ? 2.5 : 0;
+    light.current.intensity = isOn ? 2.5 * brightness : 0;
   });
   return <pointLight ref={light} color={color} intensity={0} distance={3} position={position} />;
 }

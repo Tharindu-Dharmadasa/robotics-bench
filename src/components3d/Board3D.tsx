@@ -13,6 +13,7 @@ import {getCurrentFlow} from '../engine/currentFlow';
 import {useBenchStore, useCurrentBoard} from '../store/benchStore';
 import {BOARD_DEPTH, BOARD_WIDTH, PCB_THICKNESS, UNIT, toScene} from '../render3d/scene';
 import {Part3D} from './Part3D';
+import {getEffectivePart} from '../data/parameters';
 import {GOLD} from './PartModel';
 
 const COPPER = '#d9a441';
@@ -149,7 +150,8 @@ export function Board3D() {
         </group>);
       })}
 
-      {board.parts.map((part) => {
+      {board.parts.map((rawPart) => {
+        const part = getEffectivePart(rawPart, boardState.partValues); // resistor bands, LED colour and names follow the chosen values
         const isPlaced = boardState.placedPartIds.includes(part.id);
         const isSoldered = boardState.solderedPartIds.includes(part.id);
         const isBlinking = Boolean(result?.blinkingPartIds.includes(part.id));
@@ -162,7 +164,7 @@ export function Board3D() {
           )}
           {[0.25, 0.75].map((fraction) => <SolderJoint key={fraction} position={toScene(part.x + part.width * fraction, part.y + part.depth + 2, 0)} isVisible={isPlaced} isSoldered={isSoldered} />)}
           <Part3D part={part} isPlaced={isPlaced} isBurned={boardState.burnedPartIds.includes(part.id)}
-            isLit={isBlinking || Boolean(result?.litPartIds.includes(part.id))} isBlinking={isBlinking} isHovered={hoveredPartId === part.id}
+            isLit={isBlinking || Boolean(result?.litPartIds.includes(part.id))} isBlinking={isBlinking} isHovered={hoveredPartId === part.id} brightness={result?.brightness?.[part.id] ?? 1}
             onClick={() => togglePart(part.id)} onHoverChange={(isHovering) => setHoveredPart(isHovering ? part.id : null)} />
         </group>);
       })}

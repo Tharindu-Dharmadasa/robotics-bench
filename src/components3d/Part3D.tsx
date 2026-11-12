@@ -8,7 +8,7 @@ import {useFrame} from '@react-three/fiber';
 import {Html} from '@react-three/drei';
 import type {Group, Mesh, MeshBasicMaterial} from 'three';
 import type {PartDefinition} from '../data/types';
-import {PartModel} from './PartModel';
+import {BrightnessContext, PartModel} from './PartModel';
 import {UNIT, toScene} from '../render3d/scene';
 
 const CHARRED = '#2a2a2a';
@@ -31,11 +31,11 @@ function Smoke({height}: {height: number}) {
 }
 
 interface Part3DProps {
-  part: PartDefinition; isPlaced: boolean; isBurned: boolean; isLit: boolean; isBlinking: boolean; isHovered: boolean;
+  part: PartDefinition; isPlaced: boolean; isBurned: boolean; isLit: boolean; isBlinking: boolean; isHovered: boolean; brightness?: number;
   onClick: () => void; onHoverChange: (isHovering: boolean) => void;
 }
 
-export function Part3D({part, isPlaced, isBurned, isLit, isBlinking, isHovered, onClick, onHoverChange}: Part3DProps) {
+export function Part3D({part, isPlaced, isBurned, isLit, isBlinking, isHovered, brightness = 1, onClick, onHoverChange}: Part3DProps) {
   const group = useRef<Group>(null);
   const springPosition = useRef(0), springVelocity = useRef(0); // 0 = floating in the bin, 1 = sitting on the board
   const secondsSinceBurn = useRef(99), wasBurned = useRef(false);
@@ -67,7 +67,8 @@ export function Part3D({part, isPlaced, isBurned, isLit, isBlinking, isHovered, 
       onClick={(event) => { event.stopPropagation(); onClick(); }}
       onPointerOver={(event) => { event.stopPropagation(); onHoverChange(true); document.body.style.cursor = 'pointer'; }}
       onPointerOut={() => { onHoverChange(false); document.body.style.cursor = 'auto'; }}>
-      <PartModel part={shownPart} isLit={isLit && !isBurned} isBlinking={isBlinking} />
+      {/* The glow strength follows the real current: a dim LED on a big resistor, a blazing one on a small resistor. */}
+      <BrightnessContext.Provider value={brightness}><PartModel part={shownPart} isLit={isLit && !isBurned} isBlinking={isBlinking} /></BrightnessContext.Provider>
       {isBurned && <Smoke height={part.height * UNIT} />}
       {isHovered && (
         <Html position={[0, part.height * UNIT + 0.8, 0]} center style={{pointerEvents: 'none'}}>

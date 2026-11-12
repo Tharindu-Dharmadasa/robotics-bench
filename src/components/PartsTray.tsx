@@ -7,6 +7,8 @@
 import {motion} from 'framer-motion';
 import {useBenchStore, useCurrentBoard} from '../store/benchStore';
 import type {PartDefinition, PartKind} from '../data/types';
+import {getEffectivePart} from '../data/parameters';
+import {ValueSelectors} from './ValueSelectors';
 
 /** A small symbol on each card so parts are recognisable at a glance. */
 const KIND_GLYPHS: Record<PartKind, string> = {
@@ -18,7 +20,7 @@ export function PartsTray() {
   const {board, boardState} = useCurrentBoard();
   const {togglePart, hoveredPartId, setHoveredPart} = useBenchStore();
 
-  const requiredParts = board.parts.filter((part) => !part.isMistake);
+  const requiredParts = board.parts.filter((part) => !part.isMistake).map((part) => getEffectivePart(part, boardState.partValues));
   const mistakeParts = board.parts.filter((part) => part.isMistake);
   const placedCount = requiredParts.filter((part) => boardState.placedPartIds.includes(part.id)).length;
 
@@ -71,6 +73,7 @@ export function PartsTray() {
           <div className={gridClasses}>{mistakeParts.map((part, i) => renderCard(part, i + requiredParts.length))}</div>
         </>)}
       </motion.div>
+      <ValueSelectors />
     </aside>
   );
 }

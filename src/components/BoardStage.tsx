@@ -2,6 +2,7 @@
 import {useBenchStore, useCurrentBoard} from '../store/benchStore';
 import {OUTLINE_STYLE, projectToScreen, toPolygonPoints} from '../render/isometric';
 import {PartSprite} from './PartSprite';
+import {getEffectivePart} from '../data/parameters';
 import {CurrentFlowLayer} from './CurrentFlowLayer';
 import {getCurrentFlow} from '../engine/currentFlow';
 
@@ -16,7 +17,7 @@ export function BoardStage() {
 
   // Draw back-to-front: parts farther from the viewer (smaller x + y) are drawn first,
   // so nearer parts correctly cover them. This is the "painter's algorithm".
-  const partsBackToFront = [...board.parts].sort((a, b) => a.x + a.y - (b.x + b.y));
+  const partsBackToFront = board.parts.map((part) => getEffectivePart(part, boardState.partValues)).sort((a, b) => a.x + a.y - (b.x + b.y));
 
   return (
     <svg viewBox="0 0 720 400" className="block w-full rounded-xl border border-[var(--line)] bg-[var(--surface)]" role="img" aria-label={`${board.name} board`}>

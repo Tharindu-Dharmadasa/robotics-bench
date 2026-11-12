@@ -3,7 +3,9 @@
 // Each board = parts (what you can place) + rules (what happens when powered).
 // "Mistake" parts (isMistake) are wrong wires the user adds ON PURPOSE to break things.
 // ─────────────────────────────────────────────────────────────────────────────
-import type {BoardDefinition, Condition, FaultRule, PartDefinition, PartKind} from './types';
+import type {BoardDefinition, Condition, FaultRule, PartDefinition, PartKind, PartParameter} from './types';
+import {LED_TYPES, RESISTOR_OPTIONS, SUPPLY_OPTIONS} from './parameters';
+import {analyzeLedBoard, analyzeTransistorBoard} from './circuitModels';
 
 /** Default size [width, depth, height] and colour for each kind of part. Any of these can be overridden per part. */
 const KIND_DEFAULTS: Record<PartKind, {size: [number, number, number]; color: string}> = {
@@ -31,6 +33,11 @@ const present = (id: string): Condition => ({partPresent: id});
 const missing = (id: string): Condition => ({partMissing: id});
 const ALWAYS: Condition = {allOf: []}; // empty "all of" is always true: the final "everything is fine" rule
 
+// Adjustable-part helpers: they make a part editable in the "Component values" panel.
+const resistorParam = (defaultOhms: number, label: string): PartParameter => ({kind: 'resistance', label, defaultValue: defaultOhms, options: RESISTOR_OPTIONS});
+const supplyParam = (volts: number): PartParameter => ({kind: 'supplyVoltage', label: 'Supply voltage', defaultValue: volts, options: SUPPLY_OPTIONS});
+const ledParam = (colorKey: string): PartParameter => ({kind: 'ledColor', label: 'LED colour', defaultValue: colorKey, options: Object.keys(LED_TYPES)});
+
 // Resistor colour codes
 const BAND = {black: '#1a1a1a', brown: '#7a4a1e', red: '#c62828', orange: '#e07a1f', yellow: '#e6c619', violet: '#7b3fa0'};
 const OHMS_330 = [BAND.orange, BAND.orange, BAND.brown], KILOHM_1 = [BAND.brown, BAND.black, BAND.red], KILOHM_4_7 = [BAND.yellow, BAND.violet, BAND.red];
@@ -41,13 +48,13 @@ const DARK = '#2b2b2b', RED_WIRE = {color: '#e03a2f', width: 36, depth: 8, heigh
 
 export const BOARDS: BoardDefinition[] = [
   // ── 01 ─ the simplest circuit ──────────────────────────────────────────────
-  {id: 'led', pcbStyle: 'perfboard', currentPaths: [['power', 'resistor', 'led']], figureLabel: 'Fig. 01', name: 'LED + resistor', pcbColor: '#2f6b4f',
+  {id: 'led', pcbStyle: 'perfboard', currentPaths: [['power', 'resistor', 'led']], figureLabel: 'Fig. 01', name: 'LED + resistor', pcbColor: '#2f6b4f', analyze: analyzeLedBoard,
    lessonText: 'A power source, a current limiter and a light. The resistor decides how much current the LED sees.',
    tryToBreakText: 'Power it without the resistor, then replace the burnt LED and try again.',
    parts: [
-     part('header', 'power', '5 V header', 'brings power in', [20, 60], {width: 30, pinCount: 2}),
-     part('resistor', 'resistor', '330 Ω resistor', 'limits current', [105, 28], {bands: OHMS_330}),
-     part('led', 'led', 'Red LED', 'the light (the load)', [170, 84], RED_LED)],
+     part('header', 'power', '5 V header', 'brings power in', [20, 60], {width: 30, pinCount: 2, parameter: supplyParam(5)}),
+     part('resistor', 'resistor', '330 Ω resistor', 'limits current', [105, 28], {bands: OHMS_330, parameter: resistorParam(330, 'Series resistor')}),
+     part('led', 'led', 'Red LED', 'the light (the load)', [170, 84], {...RED_LED, parameter: ledParam('red')})],
    rules: [
      rule(missing('power'), 'DEAD', 'No 5 V source on the board, so nothing is powered.'),
      rule(missing('led'), 'IDLE', 'The circuit is open: there is no LED to carry current.'),
@@ -55,7 +62,7 @@ export const BOARDS: BoardDefinition[] = [
      rule(ALWAYS, 'RUNNING', 'LED lit. The resistor limits current to about 14 mA.', 14, {litPartIds: ['led']})]},
 
   // ── 02 ─ a transistor as an electronic switch ──────────────────────────────
-  {id: 'transistor', pcbStyle: 'perfboard', currentPaths: [['power', 'baseResistor', 'transistor'], ['power', 'ledResistor', 'led', 'transistor']], figureLabel: 'Fig. 02', name: 'Transistor switch', pcbColor: '#2f6b4f', inputs: [{id: 'signal', label: 'Signal'}],
+  {id: 'transistor', pcbStyle: 'perfboard', currentPaths: [['power', 'baseResistor', 'transistor'], ['power', 'ledResistor', 'led', 'transistor']], figureLabel: 'Fig. 02', name: 'Transistor switch', pcbColor: '#2f6b4f', analyze: analyzeTransistorBoard, inputs: [{id: 'signal', label: 'Signal'}],
    lessonText: 'A tiny base current lets a transistor switch a bigger load current, the way a microcontroller pin drives bigger loads.',
    tryToBreakText: 'Set the signal HIGH with no base resistor, or remove the LED resistor.',
    sketch: `const int BASE_PIN = 7;   // controller pin wired to the base resistor
@@ -72,11 +79,11 @@ void loop() {
 }`,
    serialOutput: ['Base HIGH: transistor on, LED on', 'Base LOW: transistor off, LED off'],
    parts: [
-     part('header', 'power', '5 V header', 'brings power in', [14, 10], {width: 30, pinCount: 2}),
-     part('resistor', 'baseResistor', '1 kΩ base resistor', 'protects the transistor base', [70, 30], {bands: KILOHM_1}),
+     part('header', 'power', '5 V header', 'brings power in', [14, 10], {width: 30, pinCount: 2, parameter: supplyParam(5)}),
+     part('resistor', 'baseResistor', '1 kΩ base resistor', 'protects the transistor base', [70, 30], {bands: KILOHM_1, parameter: resistorParam(1000, 'Base resistor')}),
      part('block', 'transistor', '2N2222 NPN', 'the switch', [130, 22], {width: 16, depth: 14, height: 12, color: DARK}),
-     part('resistor', 'ledResistor', '330 Ω resistor', 'limits LED current', [75, 80], {bands: OHMS_330}),
-     part('led', 'led', 'Green LED', 'the light (the load)', [170, 90], GREEN_LED)],
+     part('resistor', 'ledResistor', '330 Ω resistor', 'limits LED current', [75, 80], {bands: OHMS_330, parameter: resistorParam(330, 'LED resistor')}),
+     part('led', 'led', 'Green LED', 'the light (the load)', [170, 90], {...GREEN_LED, parameter: ledParam('green')})],
    rules: [
      rule(missing('power'), 'DEAD', 'No 5 V source on the board.'),
      rule(missing('transistor'), 'IDLE', 'No transistor, so nothing can switch the LED.'),

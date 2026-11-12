@@ -28,6 +28,7 @@ interface BenchStore {
   placeAllParts: () => Promise<void>;
   solderAllParts: () => Promise<void>;
   togglePower: () => void;
+  setPartValue: (partId: string, value: number | string) => void;
   toggleInput: (inputId: string) => void;
   resetBoard: () => void;
   uploadSketch: () => Promise<void>;
@@ -92,6 +93,8 @@ export const useBenchStore = create<BenchStore>((set, get) => {
       (state, id) => state.placedPartIds.includes(id) && !state.solderedPartIds.includes(id),
       (state, id) => ({...state, solderedPartIds: [...state.solderedPartIds, id]})),
 
+    // Changing a value re-runs the engine, so the result (and the maths) update instantly, even while powered.
+    setPartValue: (partId, value) => updateCurrentBoard((state) => ({...state, partValues: {...state.partValues, [partId]: value}})),
     togglePower: () => updateCurrentBoard((state) => ({...state, isPowered: !state.isPowered})),
     toggleInput: (inputId) => updateCurrentBoard((state) => ({...state, inputValues: {...state.inputValues, [inputId]: !state.inputValues[inputId]}})),
     resetBoard: () => {

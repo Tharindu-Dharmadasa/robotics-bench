@@ -17,6 +17,8 @@ npm test        # runs the rules-engine tests
 | `src/store/benchStore.ts` | App state + actions (Zustand). Every action re-runs the engine |
 | `src/engine/serialScript.ts` | Decides what the serial monitor should print (pure, tested) |
 | `src/components/CodePanel.tsx`, `SerialMonitor.tsx` | Example code + simulated upload, and the serial monitor |
+| `src/data/parameters.ts`, `circuitModels.ts` | Adjustable parts (values, LED types, colour bands) and the value-aware physics (Ohm's law) |
+| `src/components/ValueSelectors.tsx`, `CalcPanel.tsx` | The "Component values" dropdowns and the "Live calculation" panel |
 | `src/engine/currentFlow.ts` | Works out which copper segments carry current (normal, surge or blocked) |
 | `src/components/CurrentFlowLayer.tsx` | Draws the traces, moving current dots and the red break markers |
 | `src/components3d/*` | The 3D view (React Three Fiber): `Stage3D` (camera, light), `Board3D` (PCB, traces, current), `Part3D` (spring animation), `PartModel` (each part's shape) |

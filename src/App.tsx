@@ -12,6 +12,7 @@ import {PartsTray} from './components/PartsTray';
 import {ControlBar} from './components/ControlBar';
 import {CodePanel} from './components/CodePanel';
 import {SerialMonitor} from './components/SerialMonitor';
+import {CalcPanel} from './components/CalcPanel';
 // The 3D scene is loaded only when needed, so the 2D app stays light.
 const Stage3D = lazy(() => import('./components3d/Stage3D'));
 
@@ -58,6 +59,7 @@ export default function App() {
             <motion.p key={guidanceMessage} initial={{opacity: 0, y: 8}} animate={{opacity: 1, y: 0}} exit={{opacity: 0}} aria-live="polite"
               className="rounded-md border-l-4 bg-[var(--surface)] p-3" style={{borderColor: accentColor}}>{guidanceMessage}</motion.p>
           </AnimatePresence>
+          <CalcPanel />
 
           <div className="grid gap-3 md:grid-cols-2">
             {[['Meet the board', board.lessonText], ['Try to break it', board.tryToBreakText]].map(([title, text]) => (

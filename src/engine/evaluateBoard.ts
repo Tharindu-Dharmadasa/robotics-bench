@@ -3,6 +3,7 @@
 // Given a board and the user's progress, it answers: "what happens now?"
 // ─────────────────────────────────────────────────────────────────────────────
 import type {BoardDefinition, BoardState, Condition, SimulationResult} from '../data/types';
+import {getPartValue} from '../data/parameters';
 
 export function evaluateBoard(board: BoardDefinition, state: BoardState): SimulationResult | null {
   // Nothing happens until the user plugs in power.
@@ -32,5 +33,11 @@ export function evaluateBoard(board: BoardDefinition, state: BoardState): Simula
     return {status: 'IDLE', message: 'Nothing happens.', currentMilliamps: 0, litPartIds: [], blinkingPartIds: [], burnedPartIds: []};
   }
   const {condition: _unused, ...result} = matchingRule; // drop the condition, keep the outcome
+  // The rules only know which parts are present. If everything is in place, the board's physics
+  // can refine the outcome using the VALUES the user chose (e.g. a 47 Ω resistor overdrives the LED).
+  if (result.status === 'RUNNING' && board.analyze) {
+    const refined = board.analyze((partId) => getPartValue(board, partId, state.partValues));
+    if (refined) return {...result, ...refined};
+  }
   return result;
 }

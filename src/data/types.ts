@@ -22,6 +22,14 @@ export type Condition =
 /** What a part looks like. Each kind has its own drawing code in render/PartShape.tsx. */
 export type PartKind = 'resistor' | 'led' | 'chip' | 'capacitor' | 'header' | 'terminal' | 'heatsink' | 'relay' | 'motor' | 'connector' | 'eye' | 'block';
 
+/** What the user may adjust on a part. `options` are the allowed values shown in the dropdown. */
+export interface PartParameter {
+  kind: 'resistance' | 'ledColor' | 'supplyVoltage';
+  label: string;                     // e.g. "Series resistor"
+  defaultValue: number | string;     // ohms, volts, or an LED colour key
+  options: (number | string)[];
+}
+
 /** One physical component (resistor, LED, chip...) with its place on the board. */
 export interface PartDefinition {
   id: string;            // unique inside a board, used by rules, e.g. "baseResistor"
@@ -37,6 +45,8 @@ export interface PartDefinition {
   hasWindow?: boolean;   // draws a dark opening (USB ports)
   /** A "mistake" part (wrong wire, reversed supply...). "Place all" skips it: the user adds it on purpose to see what breaks. */
   isMistake?: boolean;
+  /** Makes the part adjustable (resistance, LED colour, supply voltage). */
+  parameter?: PartParameter;
 }
 
 /** "If this condition matches, this is what happens." The FIRST matching rule wins. */
@@ -51,7 +61,10 @@ export interface FaultRule {
 }
 
 /** What the engine returns: a rule without its condition. */
-export type SimulationResult = Omit<FaultRule, 'condition'>;
+export type SimulationResult = Omit<FaultRule, 'condition'> & {
+  details?: string[];                      // the working shown in the Live calculation panel
+  brightness?: Record<string, number>;     // per light-emitting part: 0 = dark, 1 = rated, above 1 = over-driven
+};
 
 /** A complete board: its parts, its rules, and its teaching text. */
 export interface BoardDefinition {
@@ -72,6 +85,8 @@ export interface BoardDefinition {
   sketch?: string;
   /** Lines the sketch prints to the serial monitor, over and over, while the board is running. */
   serialOutput?: string[];
+  /** Optional physics for this board: turns the chosen part values into numbers (runs when the rules say RUNNING). */
+  analyze?: (value: (partId: string) => number | string) => Partial<SimulationResult> | null;
 }
 
 /** The user's progress on ONE board. This is the only thing that changes while using the app. */
@@ -82,4 +97,6 @@ export interface BoardState {
   isPowered: boolean;
   inputValues: Record<string, boolean>;
   lastResult: SimulationResult | null;  // outcome of the latest power-on evaluation
+  /** Values the user picked for adjustable parts. A missing entry means the part's default. */
+  partValues?: Record<string, number | string>;
 }
