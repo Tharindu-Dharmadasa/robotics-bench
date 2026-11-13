@@ -38,7 +38,7 @@ const partIdsUsedBy = (condition: Condition): string[] =>
   : 'anyOf' in condition ? condition.anyOf.flatMap(partIdsUsedBy) : [];
 
 describe('all boards', () => {
-  it('there are 13 boards', () => expect(BOARDS).toHaveLength(13));
+  it('there are 14 boards', () => expect(BOARDS).toHaveLength(14));
   BOARDS.forEach((board) => {
     it(`${board.name}: a complete build runs`, () => {
       const ids = board.parts.filter((part) => !part.isMistake).map((part) => part.id);

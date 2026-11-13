@@ -22,10 +22,21 @@ const trim = (n: number) => String(Math.round(n * 100) / 100);
 /** 330 -> "330 Ω", 4700 -> "4.7 kΩ" */
 export const formatOhms = (ohms: number) => ohms >= 1e6 ? `${trim(ohms / 1e6)} MΩ` : ohms >= 1000 ? `${trim(ohms / 1000)} kΩ` : `${trim(ohms)} Ω`;
 
+export const formatCapacitance = (farads: number) =>
+  farads >= 1e-3 ? `${trim(farads * 1e3)} mF` :
+  farads >= 1e-6 ? `${trim(farads * 1e6)} µF` :
+  farads >= 1e-9 ? `${trim(farads * 1e9)} nF` : `${trim(farads * 1e12)} pF`;
+
+export const formatInductance = (henrys: number) =>
+  henrys >= 1 ? `${trim(henrys)} H` :
+  henrys >= 1e-3 ? `${trim(henrys * 1e3)} mH` : `${trim(henrys * 1e6)} µH`;
+
 /** How an option is shown in a dropdown. */
 export function formatOption(kind: string, option: number | string): string {
   if (kind === 'resistance') return formatOhms(Number(option));
   if (kind === 'supplyVoltage') return `${option} V`;
+  if (kind === 'capacitance') return formatCapacitance(Number(option));
+  if (kind === 'inductance') return formatInductance(Number(option));
   return LED_TYPES[String(option)]?.label ?? String(option);
 }
 
@@ -52,6 +63,8 @@ export function getEffectivePart(part: PartDefinition, partValues?: Record<strin
     case 'resistance': return {...part, name: `${formatOhms(Number(value))} resistor`, bands: ohmsToBands(Number(value))};
     case 'ledColor': { const led = LED_TYPES[String(value)]; return {...part, name: `${led.label} LED`, color: led.color, glowColor: led.glow}; }
     case 'supplyVoltage': return {...part, name: `${value} V header`};
+    case 'capacitance': return {...part, name: `${formatCapacitance(Number(value))} capacitor`};
+    case 'inductance': return {...part, name: `${formatInductance(Number(value))} inductor`};
     default: return part;
   }
 }

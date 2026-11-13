@@ -6,6 +6,7 @@
 import type {BoardDefinition, Condition, FaultRule, PartDefinition, PartKind, PartParameter} from './types';
 import {LED_TYPES, RESISTOR_OPTIONS, SUPPLY_OPTIONS} from './parameters';
 import {analyzeLedBoard, analyzeTransistorBoard} from './circuitModels';
+import {analyzeSandboxBoard} from '../engine/solver/circuitBridge';
 
 /** Default size [width, depth, height] and colour for each kind of part. Any of these can be overridden per part. */
 const KIND_DEFAULTS: Record<PartKind, {size: [number, number, number]; color: string}> = {
@@ -37,6 +38,7 @@ const ALWAYS: Condition = {allOf: []}; // empty "all of" is always true: the fin
 const resistorParam = (defaultOhms: number, label: string): PartParameter => ({kind: 'resistance', label, defaultValue: defaultOhms, options: RESISTOR_OPTIONS});
 const supplyParam = (volts: number): PartParameter => ({kind: 'supplyVoltage', label: 'Supply voltage', defaultValue: volts, options: SUPPLY_OPTIONS});
 const ledParam = (colorKey: string): PartParameter => ({kind: 'ledColor', label: 'LED colour', defaultValue: colorKey, options: Object.keys(LED_TYPES)});
+const capacitorParam = (defaultUf: number, label: string): PartParameter => ({kind: 'capacitance', label, defaultValue: defaultUf, options: [10, 47, 100, 220, 470, 1000]});
 
 // Resistor colour codes
 const BAND = {black: '#1a1a1a', brown: '#7a4a1e', red: '#c62828', orange: '#e07a1f', yellow: '#e6c619', violet: '#7b3fa0'};
@@ -475,6 +477,38 @@ void loop() {
      rule(missing('servo'), 'IDLE', 'No servo connected.', 2),
      rule(missing('bulkCap'), 'RUNNING', 'Moves, but voltage dips make it jitter.', 320, {litPartIds: ['servo']}),
      rule(ALWAYS, 'RUNNING', 'Smooth sweep from 0° to 180°.', 250, {litPartIds: ['servo']})]},
+
+  // ── 14 ─ Engineering Sandbox ───────────────────────────────────────────────
+  {id: 'sandbox', pcbStyle: 'perfboard', currentPaths: [['power', 'resistor', 'led'], ['power', 'filterCap']], figureLabel: 'Fig. 14', name: 'Engineering Sandbox', pcbColor: '#1e382b', analyze: analyzeSandboxBoard,
+   lessonText: 'Engineering-grade sandbox with continuous component parameters and Modified Nodal Analysis (MNA). Real-time matrix physics model node voltages, branch currents, and component dissipation.',
+   tryToBreakText: 'Set a low resistor (10 Ω) on 12 V to exceed the 0.25 W power rating, or remove the resistor to burn the LED.',
+   sketch: `void setup() {
+  Serial.begin(115200);
+  Serial.println("=== MNA Virtual Test Bench Online ===");
+}
+
+void loop() {
+  // Real-time telemetry solved by Modified Nodal Analysis
+  Serial.println("Telemetry: VCC = 5.0V, I_branch = 9.1mA");
+  delay(1000);
+}`,
+   serialOutput: [
+     'Telemetry: VCC = 5.0V, I_branch = 9.1mA',
+     'Node voltages: V_anode = 2.00V, V_ground = 0.00V',
+     'Operating point: P_dissipated = 27.3mW (safe)',
+   ],
+   parts: [
+     part('header', 'power', 'DC Power Supply', 'variable bench supply', [16, 20], {width: 32, pinCount: 2, parameter: supplyParam(5)}),
+     part('resistor', 'resistor', 'Current limiter', 'limits branch current', [90, 28], {bands: OHMS_330, parameter: resistorParam(330, 'Series resistor')}),
+     part('capacitor', 'filterCap', 'Filter capacitor', 'bulk decoupling', [30, 90], {width: 20, depth: 20, height: 24, parameter: capacitorParam(100, 'Filter capacitance (µF)')}),
+     part('led', 'led', 'Output load LED', 'visual current indicator', [170, 80], {...RED_LED, parameter: ledParam('red')}),
+     part('block', 'shortJumper', 'Short-circuit wire', 'MISTAKE: bypasses resistor', [90, 60], RED_WIRE)],
+   rules: [
+     rule(missing('power'), 'DEAD', 'No DC power supply connected to the board.'),
+     rule(present('shortJumper'), 'FAULT', 'Zero-ohm short circuit bypassed the resistor: LED burned out instantly.', 600, {burnedPartIds: ['led']}),
+     rule(missing('led'), 'IDLE', 'Open circuit: no load connected to draw current.'),
+     rule(missing('resistor'), 'FAULT', 'Direct supply connection exceeded maximum forward current rating: LED burned out.', 500, {burnedPartIds: ['led']}),
+     rule(ALWAYS, 'RUNNING', 'Circuit operating point solved via MNA engine.', 15, {litPartIds: ['led']})]},
 ];
 
 /** Look a board up by id, e.g. BOARDS_BY_ID['led']. */

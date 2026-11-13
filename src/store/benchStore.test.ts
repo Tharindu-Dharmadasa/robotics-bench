@@ -7,7 +7,13 @@ const initialState = useBenchStore.getState();
 const store = () => useBenchStore.getState();
 const board = (id = 'led') => store().boardStates[id];
 /** Let a step-by-step action (which awaits timers) run to the end. */
-async function finish(action: Promise<void>) { await vi.runAllTimersAsync(); await action; }
+async function finish(action: Promise<void>) {
+  let done = false;
+  action.then(() => { done = true; });
+  while (!done) {
+    await vi.advanceTimersByTimeAsync(350);
+  }
+}
 /** Place, solder and power the current board. */
 async function buildAndPower() {
   await finish(store().placeAllParts());
@@ -16,7 +22,7 @@ async function buildAndPower() {
 }
 
 beforeEach(() => { useBenchStore.setState(initialState, true); vi.useFakeTimers(); });
-afterEach(() => vi.useRealTimers());
+afterEach(() => { store().stopTelemetry(); vi.useRealTimers(); });
 
 describe('bench store', () => {
   it('togglePart places a part, then removes it', () => {
