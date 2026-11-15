@@ -11,7 +11,15 @@ export type Kind =
   | "led"
   | "res"
   | "reg"
-  | "fuse";
+  | "fuse"
+  | "esp32"
+  | "ultrasonic"
+  | "motorDriver"
+  | "stepperDriver"
+  | "servo"
+  | "imu"
+  | "encoder"
+  | "oled";
 
 export interface Part {
   id: string;
