@@ -21,6 +21,18 @@ export type Kind =
   | "encoder"
   | "oled";
 
+/** How a missing or mis-configured part manifests on the bench. */
+export type FaultSeverity = "halt" | "burnout" | "degraded";
+
+/** One causal consequence triggered by removing or re-valuing a part. */
+export interface PartEffect {
+  severity: FaultSeverity;
+  /** Serial monitor message printed when the effect fires (shown in red). */
+  message: string;
+  /** Optional id of another part that visually burns out as a result. */
+  damagedPartId?: string;
+}
+
 export interface Part {
   id: string;
   name: string;
@@ -31,6 +43,14 @@ export interface Part {
   rot?: number;
   color?: string;
   label?: string;
+  /** Printed / nominal value, e.g. "1kΩ", "16MHz", "500mA". */
+  value?: string;
+  /** Editable value choices offered in the parts inspector. */
+  valueOptions?: string[];
+  /** What happens when this part is removed while the board is powered. */
+  onRemoveEffect?: PartEffect;
+  /** What happens when the configured value is changed; keyed by the option string. */
+  valueEffects?: Record<string, PartEffect>;
 }
 
 export interface FaultRule {
