@@ -22,6 +22,9 @@ export default function BottomPanels({
   logRef,
 }: BottomPanelsProps) {
   const [copied, setCopied] = useState(false);
+  const firstComment = code.split("\n")[0] ?? "";
+  const sketchTitle =
+    firstComment.replace(/^\/\/\s*/, "").split(/[—:]/)[0].trim() || "SKETCH";
 
   return (
     <div className="grid h-60 shrink-0 grid-cols-3 border-t border-[#222]">
@@ -48,7 +51,7 @@ export default function BottomPanels({
       </div>
       <div className="flex min-h-0 flex-col border-r border-[#222] p-4">
         <div className="mb-2 flex items-center justify-between text-[10px] tracking-widest text-[#666]">
-          TRY IT YOURSELF · BLINK
+          TRY IT YOURSELF · {sketchTitle.toUpperCase()}
           <button
             onClick={() => {
               navigator.clipboard?.writeText(code);

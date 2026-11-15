@@ -38,6 +38,12 @@ export interface FaultRule {
   label: string;
   cause: string;
   effect: string;
+  /** Serial monitor message printed when the fault fires (shown in red). */
+  errorMessage: string;
+  /** Part that visually burns out / smokes when the fault is active. */
+  criticalPart: string;
+  /** Part ids that must be present, or the board faults automatically on power-on. */
+  criticalParts?: string[];
 }
 
 export type SimStatus =
