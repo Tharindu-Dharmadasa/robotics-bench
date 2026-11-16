@@ -425,18 +425,21 @@ export const BOARD_SPECS: BoardSpec[] = [
     id: 2,
     name: "LED + resistor",
     subtitle: "Ohm's law",
+    boardStyle: "breadboard",
     description: [
-      { text: "The bench's simplest lab: a " },
+      { text: "The bench's simplest lab, built on a " },
+      { text: "170-point solderless breadboard", bold: true },
+      { text: ": a " },
       { text: "5 mm red LED", bold: true },
       { text: " fed from " },
       { text: "5 V", bold: true },
       { text: " through a " },
-      { text: "330 Ω", bold: true },
+      { text: "220 Ω", bold: true },
       {
-        text: " current-limiting resistor. The resistor sets the current to roughly 10 mA — leave it out and the LED burns out in a flash.",
+        text: " color-banded limiter (red-red-brown-gold). The resistor sets the branch to roughly 13 mA — swap it for 10 Ω and the LED burns out in a flash.",
       },
     ],
-    code: `// LED blink through a 330Ω limiter
+    code: `// LED blink through a 220Ω limiter
 const int LED = 9;
 
 void setup() {
@@ -454,43 +457,125 @@ void loop() {
 }`,
     parts: [
       {
+        id: "j1",
+        name: "Jumper wire (5V)",
+        kind: "jumper",
+        smd: false,
+        p: [-1.55, 0.85],
+        color: "#d64b3a",
+        rot: Math.PI / 2,
+        label: "+5V",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "SUPPLY FEED CUT: this red jumper is the only path from the 5 V rail into the working row. With it gone the breadboard row is completely dead — no current can enter the LED branch at all, so nothing lights and nothing runs.",
+        },
+      },
+      {
+        id: "j2",
+        name: "Jumper wire (GND)",
+        kind: "jumper",
+        smd: false,
+        p: [-1.55, -0.85],
+        color: "#22252a",
+        rot: Math.PI / 2,
+        label: "GND",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "RETURN PATH CUT: current needs a loop. Without this black jumper back to the ground rail, any current pushed into the row has nowhere to return — the LED branch reads open from the supply's point of view and stays dark.",
+        },
+      },
+      {
+        id: "j3",
+        name: "Jumper wire (signal)",
+        kind: "jumper",
+        smd: false,
+        p: [0.55, 0.9],
+        color: "#e0b33a",
+        label: "SIG",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "SIGNAL LINE SEVERED: the MCU pin no longer reaches the switch/LED branch. The supply and ground rails are intact, so the board looks healthy — but the control signal never arrives and the LED simply stays off.",
+        },
+      },
+      {
+        id: "r1",
+        name: "220Ω resistor",
+        kind: "res",
+        smd: false,
+        p: [-0.35, 0.35],
+        value: "220Ω",
+        label: "R1 · red-red-brown",
+        valueOptions: ["220Ω (Safe)", "10Ω (Too Low)", "10kΩ (Dim)"],
+        valueEffects: {
+          "10Ω (Too Low)": {
+            severity: "burnout",
+            damagedPartId: "led2",
+            message:
+              "OVERCURRENT (300 mA): with a 10 Ω limiter the LED sees (5 V − 2 V) / 10 Ω ≈ 300 mA — fifteen times its 20 mA rating. The junction overheats and burns out within seconds.",
+          },
+          "10kΩ (Dim)": {
+            severity: "degraded",
+            message:
+              "STARVED LED: (5 V − 2 V) / 10 kΩ ≈ 0.3 mA — a tenth of the design current. The LED still works electrically but glows so dim you'll think the circuit is off.",
+          },
+        },
+        onRemoveEffect: {
+          severity: "burnout",
+          damagedPartId: "led2",
+          message:
+            "NO CURRENT LIMIT: with the 220 Ω gone the LED is wired almost straight across 5 V. A red LED clamps its forward voltage at ~2 V, so the supply drives (5 − 2) V into nearly zero resistance — the junction flashes bright, cooks and dies.",
+        },
+      },
+      {
         id: "led2",
         name: "5mm red LED",
         kind: "led",
         smd: false,
-        p: [-1.4, 0.2],
+        p: [0.55, 0.35],
         color: "#ff4136",
         label: "LED",
-      },
-      {
-        id: "r1",
-        name: "330Ω resistor",
-        kind: "res",
-        smd: true,
-        p: [0.2, -0.9],
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "INDICATOR DARK: the series path is now open, so no current flows through the resistor either — nothing is damaged, you've simply removed the thing the circuit was built to light. Plug it back in and Blink resumes.",
+        },
       },
       {
         id: "sw1",
         name: "Tactile switch",
         kind: "btn",
         smd: false,
-        p: [0.9, 1.2],
+        p: [0.95, -0.6],
         label: "SW1",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "MANUAL TRIGGER GONE: the tactile switch was the branch's input. Without it the MCU pin still drives the row through the signal jumper, but the push-button interaction the lab demonstrates is impossible.",
+        },
       },
       {
-        id: "hdr1",
-        name: "Header 4-pin",
-        kind: "hdr",
-        smd: false,
-        p: [-2.4, -2.0],
-        n: 4,
+        id: "c1",
+        name: "100nF cap",
+        kind: "cap",
+        smd: true,
+        p: [-0.35, -0.6],
+        value: "100nF",
+        label: "C1",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "RAIL SPIKES UNCAPPED: every time the LED branch switches, the sudden current step kicks the breadboard rails. C1 is the local charge reservoir that absorbs the spike — without it, sensitive neighbors on the rail see the glitch.",
+        },
       },
     ],
     faultRule: {
       id: "led-burnout",
       label: "LED burnout",
       cause:
-        "The LED is driven straight from 5 V with no current-limiting resistor in series.",
+        "The LED is driven from 5 V with no current-limiting resistor in series.",
       effect:
         "The junction flashes bright, cooks and dies; the circuit reads open.",
       errorMessage: "Overcurrent on the LED leg — junction burned out.",
@@ -502,15 +587,16 @@ void loop() {
     id: 3,
     name: "Transistor switch",
     subtitle: "logic drives power",
+    boardStyle: "perfboard",
     description: [
-      { text: "A " },
-      { text: "2N2222 NPN", bold: true },
-      { text: " switches the load, not the pin: a small " },
-      { text: "base current", bold: true },
-      { text: " controls a much larger collector current through the " },
-      { text: "LED", bold: true },
+      { text: "Hand-soldered on " },
+      { text: "perfboard", bold: true },
+      { text: ": a " },
+      { text: "2N2222A NPN", bold: true },
+      { text: " switches a " },
+      { text: "5 V relay", bold: true },
       {
-        text: ". A digital pin can only source ~20 mA — transistors do the heavy lifting.",
+        text: " coil, not the pin. A 1 kΩ base resistor limits the drive, a 10 kΩ pull-down keeps the base defined, and the 1N4007 flyback diode saves the transistor when the coil switches off.",
       },
     ],
     code: `// NPN low-side switch: base resistor drives Q1
@@ -532,66 +618,125 @@ void loop() {
     parts: [
       {
         id: "q1",
-        name: "2N2222 NPN",
-        kind: "btn",
+        name: "2N2222A NPN",
+        kind: "to92",
         smd: false,
-        p: [-1.2, 0.4],
+        p: [-0.9, 0.35],
         label: "Q1",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "NO CURRENT AMPLIFIER: a digital pin can only source ~20 mA — the relay coil alone wants 70 mA. Without Q1 the MCU pin is connected straight at the coil: it sags, browns out, and nothing ever switches. The transistor is the whole point of the lab.",
+        },
       },
       {
         id: "rb",
-        name: "10kΩ base resistor",
+        name: "1kΩ base resistor",
         kind: "res",
-        smd: true,
-        p: [0.3, 1.0],
+        smd: false,
+        p: [0.45, 1.1],
+        value: "1kΩ",
+        label: "R-B · brown-black-red",
+        valueOptions: ["1kΩ (Safe)", "10Ω (Too Low)", "100kΩ (Weak Drive)"],
+        valueEffects: {
+          "10Ω (Too Low)": {
+            severity: "burnout",
+            damagedPartId: "q1",
+            message:
+              "BASE OVERDRIVE: I_B = (5 V − 0.7 V) / 10 Ω ≈ 430 mA — thirty times the safe drive and far past the B-E junction's rating. The base-emitter junction avalanches and Q1 dies shorted.",
+          },
+          "100kΩ (Weak Drive)": {
+            severity: "degraded",
+            message:
+              "STARVED BASE: I_B = (5 V − 0.7 V) / 100 kΩ ≈ 43 µA. With β≈100 the collector can only muster ~4 mA — the relay armature buzzes but never fully pulls in.",
+          },
+        },
+        onRemoveEffect: {
+          severity: "burnout",
+          damagedPartId: "q1",
+          message:
+            "UNLIMITED BASE CURRENT: with the 1 kΩ gone, the MCU pin clamps at V_BE ≈ 0.7 V and dumps its short-circuit current straight into the base-emitter junction — well past the pin's 40 mA absolute max. Q1's input junction cooks first.",
+        },
       },
       {
-        id: "rl",
-        name: "1kΩ collector resistor",
+        id: "rd",
+        name: "10kΩ pull-down",
         kind: "res",
-        smd: true,
-        p: [0.3, 0.2],
+        smd: false,
+        p: [0.45, 0.2],
+        value: "10kΩ",
+        label: "R-D · brown-black-orange",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "FLOATING BASE: with the pull-down gone, the base drifts toward its 0.7 V threshold whenever the MCU pin is Hi-Z (boot-up, reset). The transistor half-conducts on noise and the relay chatters randomly.",
+        },
       },
       {
-        id: "led2",
-        name: "5mm red LED",
-        kind: "led",
+        id: "d1",
+        name: "1N4007 flyback diode",
+        kind: "diode",
         smd: false,
-        p: [1.7, -0.6],
-        color: "#ff4136",
-        label: "LOAD",
+        p: [1.5, -0.55],
+        label: "D1",
+        onRemoveEffect: {
+          severity: "burnout",
+          damagedPartId: "q1",
+          message:
+            "BACK-EMF KILLS Q1: the relay coil is a big inductor. Cut its current and the collapsing magnetic field drives V_CE to roughly −100 V (L·di/dt) — far past the 2N2222A's 40 V rating. The collector-emitter junction avalanches and dies, usually shorted.",
+        },
       },
       {
-        id: "hdr1",
-        name: "Header 6-pin",
-        kind: "hdr",
+        id: "k1",
+        name: "5V relay",
+        kind: "relay",
         smd: false,
-        p: [-2.4, -2.0],
-        n: 6,
+        p: [1.9, 0.75],
+        label: "K1 · SRD-5VDC",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "LOAD SWITCHING LOST: Q1 and the resistors now drive nothing. The 12 V loop through the screw terminal has no contactor — the switched load can never energise, even though every other part is healthy.",
+        },
+      },
+      {
+        id: "p1",
+        name: "12V screw terminal",
+        kind: "screw",
+        smd: false,
+        p: [-2.05, -1.25],
+        label: "12V IN",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "LOAD SUPPLY SEVERED: the relay's switched contact now feeds an open terminal. The 5 V logic side still works and the relay clicks — but the 12 V load it was meant to power has no source.",
+        },
       },
     ],
     faultRule: {
-      id: "q1-open",
-      label: "Open transistor",
+      id: "back-emf",
+      label: "Back-EMF kill",
       cause:
-        "Base drive beyond the HFE rating cooks the collector-emitter junction until it fails open.",
-      effect: "The load LED never lights even with the base driven high.",
-      errorMessage: "Q1 collector-emitter junction failed open.",
+        "The relay coil is de-energised with no 1N4007 flyback diode across it.",
+      effect:
+        "The collapsing magnetic field spikes the collector to about −100 V and avalanches the junction.",
+      errorMessage: "Back-EMF avalanche — Q1 collector-emitter junction shorted.",
       criticalPart: "q1",
-      criticalParts: ["rb"],
+      criticalParts: ["d1"],
     },
   },
   {
     id: 4,
     name: "ESP32-S3 DevKit",
     subtitle: "WiFi + two cores",
+    boardStyle: "devkit-narrow",
     description: [
       { text: "The " },
-      { text: "ESP32-S3", bold: true },
-      { text: " is a dual-core " },
-      { text: "240 MHz", bold: true },
+      { text: "ESP32-S3-DevKitC-1", bold: true },
+      { text: ": a matte-black narrow PCB with the castellated " },
+      { text: "WROOM-1 module", bold: true },
       {
-        text: " MCU with Wi-Fi and BLE on board. EN and BOOT buttons plus a USB-C port make it the most capable devkit on the bench.",
+        text: " (silver RF shield + meander antenna), CP2102N USB bridge, AMS1117-3.3 LDO, dual USB-C, BOOT/RST buttons, an addressable WS2812 RGB LED and twin 22-pin headers.",
       },
     ],
     code: `// ESP32-S3: Wi-Fi RSSI + core heartbeat
@@ -609,51 +754,166 @@ void loop() {
 }`,
     parts: [
       {
-        id: "esp32",
-        name: "ESP32-S3 module",
-        kind: "esp32",
-        smd: false,
-        p: [0, 0.2],
-        label: "ESP32-S3",
+        id: "usb1",
+        name: "USB-C port (COM)",
+        kind: "usbc",
+        smd: true,
+        p: [-2.75, 0.3],
+        label: "COM",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "NO SERIAL / NO POWER: the CP2102N sits behind this connector. Without it there is no 5 V feed into the AMS1117-3.3 LDO and no USB-UART bridge — the board is completely dark and shows up nowhere on your machine.",
+        },
       },
       {
-        id: "c1",
-        name: "10µF decoupling cap",
-        kind: "cap",
+        id: "usb2",
+        name: "USB-C port (OTG)",
+        kind: "usbc",
         smd: true,
-        p: [-1.8, 1.1],
+        p: [-2.75, -0.3],
+        label: "OTG",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "NATIVE USB LOST: the second port wires straight to the ESP32-S3's USB-OTG peripheral. Serial-over-TinyUSB, HID and mass-flash are gone — the COM port still works, but the S3's native USB features are unreachable.",
+        },
+      },
+      {
+        id: "cp2102",
+        name: "CP2102N bridge",
+        kind: "qfp",
+        smd: true,
+        p: [-1.55, 0],
+        label: "USB-UART",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "UART BRIDGE GONE: the USB-C connector now dangles. Your PC enumerates an empty port and the ESP32's TX/RX lines have no partner — flashing and the serial monitor both become impossible, even though the chip itself is fine.",
+        },
+      },
+      {
+        id: "ams",
+        name: "AMS1117-3.3 LDO",
+        kind: "reg",
+        smd: true,
+        p: [-0.75, 0.85],
+        label: "3.3V",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "NO 3.3 V RAIL: the ESP32-S3 runs exclusively at 3.3 V and the AMS1117 is the only thing making it from 5 V. Feed the module 5 V unregulated and the radio's flash dies silently — that's why this little SOT-223 exists.",
+        },
       },
       {
         id: "rst",
-        name: "EN button",
+        name: "RST button",
         kind: "btn",
         smd: false,
-        p: [-1.7, -1.7],
-        label: "EN",
+        p: [-0.55, -0.85],
+        label: "RST",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "NO HARD RESET: with the RST button gone you cannot bounce the chip out of a hung sketch — only full power cycles. Annoying rather than fatal, and a rite of passage on every devkit.",
+        },
       },
       {
         id: "boot",
         name: "BOOT button",
         kind: "btn",
         smd: false,
-        p: [-1.7, -1.2],
+        p: [0.05, -0.85],
         label: "BOOT",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "DOWNLOAD MODE UNREACHABLE: strapping GPIO0 low at reset is what puts the ROM bootloader in flash mode. Without the button you can't re-flash if your sketch ever crashes before USB starts.",
+        },
       },
       {
         id: "ledpwr",
         name: "PWR LED",
         kind: "led",
         smd: true,
-        p: [1.5, 1.3],
-        color: "#3dff6a",
+        p: [-2.2, 0.95],
+        color: "#ff5030",
+        label: "PWR",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "NO POWER INDICATOR: the red LED is the quickest health check on the board. Its absence changes nothing electrically — you just lose the at-a-glance 'is it alive' signal that saves minutes of debugging.",
+        },
       },
       {
-        id: "hdr1",
-        name: "GPIO header",
+        id: "rgb",
+        name: "WS2812 RGB LED",
+        kind: "ws2812",
+        smd: true,
+        p: [0.75, -0.85],
+        label: "RGB",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "ADDRESSABLE LED GONE: the WS2812 daisy-chains colour data on a single wire from GPIO48. With it lifted, drive-code runs harmlessly into an open pad — the board works, but every RGB demo falls flat.",
+        },
+      },
+      {
+        id: "esp32",
+        name: "ESP32-S3-WROOM-1 module",
+        kind: "esp32",
+        smd: false,
+        p: [0.55, 0.15],
+        label: "WROOM-1",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "BRAIN REMOVED: the castellated WROOM-1 carries the dual-core 240 MHz Xtensa LX7 die, 8 MB flash/PSRAM and the 2.4 GHz radio behind its silver shield. Every other part on this PCB exists to serve it.",
+        },
+      },
+      {
+        id: "hdrL",
+        name: "Left 22-pin header",
         kind: "hdr",
         smd: false,
-        p: [2.2, -2.0],
-        n: 8,
+        p: [-0.1, 1.0],
+        n: 22,
+        rot: 0,
+        label: "3V3 side",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "TOP RAIL GONE: 22 castellated pads carrying 3V3, EN and the left GPIO bank have vanished with the header. Sensors and shields wired to that row now connect to nothing.",
+        },
+      },
+      {
+        id: "hdrR",
+        name: "Right 22-pin header",
+        kind: "hdr",
+        smd: false,
+        p: [-0.1, -1.0],
+        n: 22,
+        rot: 0,
+        label: "GND side",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "BOTTOM RAIL GONE: the right GPIO bank plus the GND row are lifted. Any peripheral grounded through this header loses its return path and drops off the bus.",
+        },
+      },
+      {
+        id: "c1",
+        name: "10µF decoupling cap",
+        kind: "cap",
+        smd: true,
+        p: [2.55, 0.55],
+        value: "10µF",
+        label: "C1",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "RAIL PULSING UNFILTERED: the S3 radio draws ~500 mA bursts every 100 ms as it transmits. C1 is the local tank that flattens those pulses — the AMS1117 alone has too much impedance to respond, so 3V3 sags with each burst.",
+        },
       },
     ],
     faultRule: {
@@ -671,13 +931,14 @@ void loop() {
     id: 5,
     name: "Ultrasonic sensor",
     subtitle: "echo ranging",
+    boardStyle: "hc-sr04",
     description: [
       { text: "The " },
       { text: "HC-SR04", bold: true },
       { text: " pings a " },
       { text: "40 kHz", bold: true },
       {
-        text: " ultrasonic burst and times the echo: distance = speed of sound × time ÷ 2. Useful range is roughly 2 cm to 4 m.",
+        text: " ultrasonic burst from its T transducer and times the echo on R: distance = speed of sound × time ÷ 2. Under the twin silver cans sit a MAX232-style driver, an LM324 gain stage and a 4 MHz crystal.",
       },
     ],
     code: `// HC-SR04: pulseIn echo ranging
@@ -702,44 +963,125 @@ void loop() {
 }`,
     parts: [
       {
-        id: "sonar",
-        name: "HC-SR04",
-        kind: "ultrasonic",
+        id: "tx1",
+        name: "T transducer (16mm)",
+        kind: "transducer",
         smd: false,
-        p: [-0.5, 0.3],
-        label: "HC-SR04",
+        p: [1.7, 0.85],
+        label: "T · emit",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "NO PING, NO ECHO: the T can converts the 40 kHz burst from the MAX232-style driver into an ultrasonic pulse. With the emitter gone the board shouts into silence — pulseIn waits a full 25 ms on every cycle and always times out.",
+        },
       },
       {
-        id: "hdr1",
-        name: "Header 4-pin",
+        id: "rx1",
+        name: "R transducer (16mm)",
+        kind: "transducer",
+        smd: false,
+        p: [1.7, -0.85],
+        label: "R · receive",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "DEAF SENSOR: the R can is the microphone. The burst still leaves the board, but the reflected wave has nothing to land on — the LM324 amp sees a flat line and the echo pin never rises.",
+        },
+      },
+      {
+        id: "u1",
+        name: "MAX232 driver",
+        kind: "dip",
+        smd: false,
+        p: [-0.9, 0.5],
+        n: 16,
+        label: "U1 · TX drive",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "TRANSMIT STAGE GONE: the RS-232-level driver IC swings the ~10 V push-pull burst that actually rings the T transducer at 40 kHz. Without it, TRIG goes into a dead transmitter — receive side healthy, nothing ever sent.",
+        },
+      },
+      {
+        id: "u2",
+        name: "LM324 gain stage",
+        kind: "dip",
+        smd: false,
+        p: [-0.9, -0.55],
+        n: 14,
+        label: "U2 · RX amp",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "RECEIVE AMP GONE: a returning echo across 3 m arrives at a few millivolts — barely a whisper. The LM324's op-amps amplify it ~60× into a logic edge; without that gain the comparator never fires and ECHO stays low.",
+        },
+      },
+      {
+        id: "y1",
+        name: "4.00MHz crystal",
+        kind: "xtal",
+        smd: false,
+        p: [0.55, 0.05],
+        value: "4.00MHz",
+        label: "Y1",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "CLOCK COLLAPSED: the 4 MHz crystal is the timebase that synthesises the 40 kHz carrier and runs the control logic on the board's small MCU. Remove it and the oscillator stalls — TRIG pulses go unanswered.",
+        },
+      },
+      {
+        id: "h1",
+        name: "4-pin right-angle header",
         kind: "hdr",
         smd: false,
-        p: [-2.4, -1.9],
+        p: [-1.95, 0],
         n: 4,
-      },
-      {
-        id: "c1",
-        name: "100nF cap",
-        kind: "cap",
-        smd: true,
-        p: [1.6, 1.0],
+        rot: Math.PI / 2,
+        label: "VCC TRIG ECHO GND",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "MODULE ISOLATED: VCC, TRIG, ECHO and GND all enter through these four right-angle pins. Lift it and the sensor is electrically an island — fully intact, but with no way for the MCU to ask it anything.",
+        },
       },
       {
         id: "r1",
         name: "10kΩ pull-up",
         kind: "res",
         smd: true,
-        p: [1.6, 0.3],
+        p: [0.6, -0.9],
+        value: "10kΩ",
+        label: "R1",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "FLOATING ECHO LINE: the echo pin is push-pull only while the module is ranging. Between pings the 10 kΩ pull-up defines it — without R1 the line drifts and pulseIn reads phantom edges from mains hum.",
+        },
+      },
+      {
+        id: "c1",
+        name: "100nF decoupling cap",
+        kind: "cap",
+        smd: true,
+        p: [-1.95, -0.8],
+        value: "100nF",
+        label: "C1",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "BURST GLITCHES: the transmit stage dumps a hard 10 V swing every ping. C1 shunts that transient at the source; without it the supply line rings and the sensitive receive amps mis-trigger on the noise.",
+        },
       },
     ],
     faultRule: {
       id: "echo-timeout",
       label: "Echo timeout",
       cause:
-        "The transducer pair is overdriven past its rated voltage and detunes.",
+        "The T transducer is overdriven past its rated voltage and detunes.",
       effect: "The echo never returns; every ping times out at 25 ms.",
       errorMessage: "HC-SR04 echo timeout — no return pulse.",
-      criticalPart: "sonar",
+      criticalPart: "tx1",
       criticalParts: ["c1"],
     },
   },

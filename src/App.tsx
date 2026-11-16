@@ -36,6 +36,44 @@ const initialValues = (spec: BoardSpec) =>
     spec.parts.filter((p) => p.value).map((p) => [p.id, p.value!]),
   );
 
+/**
+ * Board-specific serial telemetry for one 500 ms tick of the running sketch:
+ * Fig. 02 prints LED current (value-aware), Fig. 03 the relay switch state,
+ * Fig. 04 WiFi/RGB activity, Fig. 05 echo ranging. Any other board keeps the
+ * classic Blink heartbeat.
+ */
+function boardTelemetry(
+  boardId: number,
+  on: boolean,
+  ms: number,
+  values: Record<string, string>,
+): string {
+  const ts = `[${(ms / 1000).toFixed(1).padStart(5, " ")}s]`;
+  switch (boardId) {
+    case 2: {
+      if (!on) return `${ts} LED OFF · I = 0 mA`;
+      const r = (values["r1"] ?? "").toLowerCase();
+      if (r.includes("10k")) return `${ts} LED ON · I = 0.3 mA (Dim)`;
+      if (r.startsWith("10")) return `${ts} LED ON · I = 300 mA (OVERCURRENT)`;
+      return `${ts} LED ON · I = 14.5 mA (220Ω)`;
+    }
+    case 3:
+      return on
+        ? `${ts} D9 HIGH → 2N2222 SATURATED → Relay Load ON (12V)`
+        : `${ts} Relay OFF`;
+    case 4:
+      return `${ts} Core ${Math.round(ms / 500) % 2}/1: WiFi RSSI ${
+        -52 - Math.round(Math.random() * 8)
+      } dBm · GPIO48 RGB Pulse`;
+    case 5: {
+      const echo = Math.round(500 + Math.random() * 14000);
+      return `${ts} HC-SR04 Ping: Echo ${echo} µs → Distance: ${(echo / 58).toFixed(1)} cm`;
+    }
+    default:
+      return `${ts} ${on ? "LED ON" : "LED OFF"}`;
+  }
+}
+
 export default function App() {
   const [board, setBoard] = useState(0);
   const [placed, setPlaced] = useState<Set<string>>(() =>
@@ -61,6 +99,9 @@ export default function App() {
   const [flick, setFlick] = useState(false);
   const [explode, setExplode] = useState(0);
   const logRef = useRef<HTMLDivElement>(null);
+  // live mirror of `values` for the telemetry interval (no timer restarts)
+  const valuesRef = useRef(values);
+  valuesRef.current = values;
 
   const activeBoard = BOARD_SPECS[board];
   const parts = activeBoard.parts;
@@ -69,8 +110,9 @@ export default function App() {
 
   const log = (s: string) => setLogs((l) => [...l.slice(-80), s]);
   const count = placed.size;
-  const powered = usb && soldered && count === total && fault === null;
-  const status: SimStatus = fault
+  const powered =
+    usb && soldered && count === total && (!fault || fault.severity === "degraded");
+  const status: SimStatus = fault && fault.severity !== "degraded"
     ? "FAULT"
     : running
       ? "RUNNING"
@@ -140,6 +182,9 @@ export default function App() {
       setBlink(false);
       return;
     }
+    // values are read through a ref inside the tick, so changing a resistor
+    // mid-run doesn't restart the blink cycle — it just changes what the next
+    // telemetry line prints.
     let on = false;
     let ms = 0;
     const id = setInterval(() => {
@@ -148,12 +193,11 @@ export default function App() {
       setBlink(on);
       setFlick(true);
       setTimeout(() => setFlick(false), 80);
-      log(
-        `[${(ms / 1000).toFixed(1).padStart(5, " ")}s] ${on ? "LED ON" : "LED OFF"}`,
-      );
+      log(boardTelemetry(activeBoard.id, on, ms, valuesRef.current));
     }, 500);
     return () => clearInterval(id);
-  }, [running]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, activeBoard.id]);
 
   useEffect(() => {
     logRef.current?.scrollTo(0, logRef.current.scrollHeight);
@@ -190,9 +234,18 @@ export default function App() {
    * unsafe value while the board is powered. The banner shows the damaged
    * component when the effect names one, otherwise the culprit itself.
    */
-  const raiseEffect = (part: Part, eff: PartEffect) => {
-    setRunning(false);
-    setBlink(false);
+  const raiseEffect = (
+    part: Part,
+    eff: PartEffect,
+    opts: { keepRunning?: boolean } = {},
+  ) => {
+    // A degraded consequence (e.g. 10kΩ starved LED) keeps the sketch running
+    // — the board still works, just badly; burnout/halt shut it down.
+    const keep = !!opts.keepRunning && eff.severity === "degraded";
+    if (!keep) {
+      setRunning(false);
+      setBlink(false);
+    }
     const burnId =
       eff.severity === "burnout"
         ? (eff.damagedPartId ?? part.id)
@@ -216,7 +269,8 @@ export default function App() {
     log(`> ${part.name} set to ${opt}.`);
     const eff = part.valueEffects?.[opt];
     if (!eff) return;
-    if (usb && soldered && placed.has(id) && !fault) raiseEffect(part, eff);
+    if (usb && soldered && placed.has(id) && !fault)
+      raiseEffect(part, eff, { keepRunning: true });
     else
       log(
         `> Power the assembled board to see what ${opt} does to this circuit.`,
@@ -253,9 +307,9 @@ export default function App() {
     const part = parts.find((p) => p.id === id);
     if (!part) return;
     const rule = activeBoard.faultRule;
-    // Electrically powered = soldered + USB in + no active fault. Soldering
-    // requires every part placed, so the board was fully live before removal.
-    const wasPowered = usb && soldered && !fault;
+    // Electrically powered = soldered + USB in + no active (non-degraded) fault.
+    const wasPowered =
+      usb && soldered && (!fault || fault.severity === "degraded");
 
     if (placed.has(id)) {
       setPlaced((s) => {
@@ -383,7 +437,14 @@ export default function App() {
         });
         if (unsafe) {
           const cur = values[unsafe.id] ?? unsafe.value!;
-          return raiseEffect(unsafe, unsafe.valueEffects![cur]);
+          const eff = unsafe.valueEffects![cur];
+          const keep = eff.severity === "degraded";
+          raiseEffect(unsafe, eff, { keepRunning: true });
+          if (keep) {
+            log(`> avrdude: uploading ${activeBoard.name} sketch ... done.`);
+            setRunning(true);
+          }
+          return;
         }
 
         log(`> avrdude: uploading ${activeBoard.name} sketch ... done.`);
@@ -413,12 +474,26 @@ export default function App() {
     if (part.kind === "servo" || part.kind === "oled")
       return powered && running;
     if (!powered) return false;
-    if (id === "ledon") return true;
-    if (!running) return false;
-    if (id === "ledl") return blink;
-    if (id === "ledtx") return flick;
-    if (id === "ledrx") return false;
-    return false;
+    // board-specific lit targets (all behind the `powered` gate, so a removed
+    // part or active fault kills every animation at once)
+    switch (activeBoard.id) {
+      case 2: // Fig. 02: the 5 mm LED blinks with the sketch cycle
+        return id === "led2" && running ? blink : false;
+      case 3: // Fig. 03: relay armature clacks with D9
+        return id === "k1" && running ? blink : false;
+      case 4: // Fig. 04: PWR LED steady, WS2812 cycles hues while running
+        if (id === "ledpwr") return true;
+        return id === "rgb" && running;
+      case 5: // Fig. 05: the T transducer emits ping rings while running
+        return id === "tx1" && running;
+      default:
+        // Fig. 01: Uno onboard LEDs
+        if (id === "ledon") return true;
+        if (!running) return false;
+        if (id === "ledl") return blink;
+        if (id === "ledtx") return flick;
+        return false;
+    }
   };
 
   return (
@@ -462,6 +537,8 @@ export default function App() {
             count={count}
             total={total}
             status={status}
+            running={running}
+            values={values}
             eduFault={fault}
             viewMode={viewMode}
             onRemovePart={togglePart}

@@ -2,6 +2,7 @@ export type Kind =
   | "dip"
   | "qfp"
   | "usb"
+  | "usbc"
   | "jack"
   | "xtal"
   | "btn"
@@ -9,9 +10,16 @@ export type Kind =
   | "cap"
   | "ecap"
   | "led"
+  | "ws2812"
   | "res"
   | "reg"
   | "fuse"
+  | "jumper"
+  | "to92"
+  | "diode"
+  | "relay"
+  | "screw"
+  | "transducer"
   | "esp32"
   | "ultrasonic"
   | "motorDriver"
@@ -88,4 +96,19 @@ export interface BoardSpec {
   code: string;
   parts: Part[];
   faultRule: FaultRule | null;
+  /** Physical base-plate style rendered by <Pcb/> (falls back to a generic board). */
+  boardStyle?:
+    | "uno-notched"
+    | "breadboard"
+    | "perfboard"
+    | "devkit-narrow"
+    | "hc-sr04"
+    | "l298n-red"
+    | "stepstick"
+    | "sg90-cutaway"
+    | "breakout-blue"
+    | "ky040-dark"
+    | "pca9685-blue"
+    | "oled-module"
+    | "fusion-purple";
 }

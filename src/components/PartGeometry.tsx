@@ -62,34 +62,194 @@ function ServoHorn({ active }: { active: boolean }) {
   );
 }
 
-export function Geo({ part, lit }: { part: Part; lit: boolean }) {
+/** WS2812 RGB die: smoothly cycles cyan → green → blue while active. */
+function Ws2812Die({ active }: { active: boolean }) {
+  const mat = useRef<THREE.MeshStandardMaterial>(null);
+  const light = useRef<THREE.PointLight>(null);
+  const hue = useRef(0.5);
+  useFrame((_, dt) => {
+    const m = mat.current;
+    if (!m) return;
+    // drift hue through the cyan/green/blue band when powered
+    hue.current = active
+      ? 0.33 + ((hue.current - 0.33 + dt * 0.22) % 0.32)
+      : hue.current;
+    const c = new THREE.Color().setHSL(hue.current, 0.95, 0.5);
+    m.emissive.lerp(c, 1 - Math.exp(-dt * 8));
+    const pulse = active ? 2.4 + Math.sin(Date.now() * 0.006) * 0.6 : 0;
+    m.emissiveIntensity += (pulse - m.emissiveIntensity) * (1 - Math.exp(-dt * 6));
+    if (light.current) light.current.intensity += ((active ? 1.1 : 0) - light.current.intensity) * (1 - Math.exp(-dt * 6));
+  });
+  return (
+    <group position={[0, 0.095, 0]}>
+      <mesh>
+        <boxGeometry args={[0.3, 0.01, 0.3]} />
+        <meshStandardMaterial
+          ref={mat}
+          color="#d8d2c0"
+          emissive="#7fffd4"
+          emissiveIntensity={0}
+        />
+      </mesh>
+      <pointLight ref={light} position={[0, 0.2, 0]} distance={1.2} intensity={0} />
+    </group>
+  );
+}
+
+/** Relay contact armature: clacks between the NO/NC posts while driven. */
+function RelayArm({ active }: { active: boolean }) {
+  const arm = useRef<THREE.Group>(null);
+  const state = useRef(active ? 1 : 0);
+  useFrame((_, dt) => {
+    const g = arm.current;
+    if (!g) return;
+    // snap: fast clack between rest and pulled-in
+    state.current += ((active ? 1 : 0) - state.current) * (1 - Math.exp(-dt * 26));
+    g.rotation.x = 0.45 - state.current * 0.85;
+  });
+  return (
+    <group ref={arm} position={[0.05, 0.42, 0]}>
+      {/* moving contact blade */}
+      <mesh castShadow>
+        <boxGeometry args={[0.4, 0.03, 0.1]} />
+        <meshStandardMaterial color="#c9c9c9" metalness={0.9} roughness={0.3} />
+      </mesh>
+      {/* armature pivot post */}
+      <mesh position={[-0.18, -0.04, 0]}>
+        <cylinderGeometry args={[0.03, 0.03, 0.1, 10]} />
+        <meshStandardMaterial color="#8f9498" metalness={0.85} roughness={0.35} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Relay load-indicator LED: red dot on the cube face, lights while driven. */
+function RelayIndicator({ active }: { active: boolean }) {
+  const mat = useRef<THREE.MeshStandardMaterial>(null);
+  useFrame((_, dt) => {
+    const m = mat.current;
+    if (!m) return;
+    const target = active ? 3 : 0.15;
+    m.emissiveIntensity += (target - m.emissiveIntensity) * (1 - Math.exp(-dt * 10));
+  });
+  return (
+    <mesh position={[-0.3, 0.3, 0.41]}>
+      <sphereGeometry args={[0.045, 10, 10]} />
+      <meshStandardMaterial
+        ref={mat}
+        color="#ff4136"
+        emissive="#ff2a1a"
+        emissiveIntensity={0.15}
+      />
+    </mesh>
+  );
+}
+
+/**
+ * Expanding ultrasonic ping rings: a transmit wave travels out from the T
+ * transducer toward a virtual target, then the echo ring collapses back onto
+ * the R transducer. Active = the board is running its ranging sketch.
+ */
+function SonarWave({ active }: { active: boolean }) {
+  const tx = useRef<THREE.Mesh>(null);
+  const rx = useRef<THREE.Mesh>(null);
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    const period = 2.2;
+    const p = (t % period) / period;
+    const txM = tx.current;
+    const rxM = rx.current;
+    if (txM) {
+      // transmit: first half of the cycle, expanding away along +X
+      const q = Math.min(1, p * 2);
+      txM.position.x = q * 2.2;
+      txM.scale.setScalar(0.15 + q * 1.5);
+      const m = txM.material as THREE.MeshStandardMaterial;
+      m.opacity = active ? 0.5 * (1 - q) : 0;
+      txM.visible = active && q > 0.02;
+    }
+    if (rxM) {
+      // echo: second half, contracting back onto the R can
+      const q = Math.max(0, (p - 0.5) * 2);
+      rxM.position.x = (1 - q) * 2.2;
+      rxM.scale.setScalar(0.15 + (1 - q) * 1.5);
+      const m = rxM.material as THREE.MeshStandardMaterial;
+      m.opacity = active ? 0.45 * q : 0;
+      rxM.visible = active && q > 0.02;
+    }
+  });
+  return (
+    <group position={[0.42, 0.66, 0]}>
+      {/* rings stand vertical, facing +X (the acoustic axis) */}
+      <mesh ref={tx} rotation={[0, 0, Math.PI / 2]} visible={false}>
+        <ringGeometry args={[0.8, 0.95, 32]} />
+        <meshStandardMaterial
+          color="#9fd8ff"
+          emissive="#4db8ff"
+          emissiveIntensity={1.6}
+          transparent
+          opacity={0.5}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+      <mesh ref={rx} rotation={[0, 0, Math.PI / 2]} visible={false}>
+        <ringGeometry args={[0.8, 0.95, 32]} />
+        <meshStandardMaterial
+          color="#bfe9c8"
+          emissive="#59d98a"
+          emissiveIntensity={1.4}
+          transparent
+          opacity={0.45}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+export function Geo({
+  part,
+  lit,
+  energy = 1,
+}: {
+  part: Part;
+  lit: boolean;
+  /** Output-energy factor 0..1 (e.g. 10kΩ resistor => dim LED). */
+  energy?: number;
+}) {
   switch (part.kind) {
     case "dip": {
-      const legX = (i: number) => -1.1 + (i % 14) * 0.17;
-      const legZ = (i: number) => (i < 14 ? 0.33 : -0.33);
+      // leg count follows part.n (MAX232 = 16, LM324 = 14, ATmega = 28)
+      const per = Math.ceil((part.n ?? 28) / 2);
+      const span = (per - 1) * 0.17;
+      const legX = (i: number) => -span / 2 + (i % per) * 0.17;
+      const legZ = (i: number) => (i < per ? 0.33 : -0.33);
+      const bodyL = span + 0.5;
       return (
         <group>
           {/* stepped matte-charcoal epoxy body */}
           <mesh position={[0, 0.06, 0]} castShadow>
-            <boxGeometry args={[2.55, 0.12, 0.78]} />
+            <boxGeometry args={[bodyL, 0.12, 0.78]} />
             <meshStandardMaterial color="#1c1c1c" roughness={0.45} metalness={0.05} />
           </mesh>
           <mesh position={[0, 0.2, 0]} castShadow>
-            <boxGeometry args={[2.4, 0.2, 0.6]} />
+            <boxGeometry args={[bodyL - 0.15, 0.2, 0.6]} />
             <meshStandardMaterial color="#1c1c1c" roughness={0.42} metalness={0.05} />
           </mesh>
           {/* moulded index notch on the left end */}
-          <mesh position={[-1.255, 0.2, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <mesh position={[-bodyL / 2 + 0.05, 0.2, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
             <cylinderGeometry args={[0.11, 0.11, 0.05, 16]} />
             <meshStandardMaterial color="#080808" roughness={0.7} />
           </mesh>
           {/* white pin-1 dot */}
-          <mesh position={[-1.08, 0.301, 0.17]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh position={[-span / 2 + 0.08, 0.301, 0.17]} rotation={[-Math.PI / 2, 0, 0]}>
             <circleGeometry args={[0.045, 16]} />
             <meshStandardMaterial color="#f5f5ee" />
           </mesh>
-          {/* 28 gull-wing legs */}
-          {Array.from({ length: 28 }).map((_, i) => (
+          {/* gull-wing legs, one pair per part.n */}
+          {Array.from({ length: per * 2 }).map((_, i) => (
             <group key={i}>
               <mesh position={[legX(i), 0.09, legZ(i) * 1.08]}>
                 <boxGeometry args={[0.05, 0.18, 0.04]} />
@@ -107,6 +267,211 @@ export function Geo({ part, lit }: { part: Part; lit: boolean }) {
         </group>
       );
     }
+    case "usbc":
+      // USB-C receptacle: low flat silver shell with the tongue inside
+      return (
+        <group>
+          <mesh position={[0, 0.11, 0]} castShadow>
+            <boxGeometry args={[0.75, 0.22, 0.9]} />
+            <meshStandardMaterial color="#b9bec2" metalness={0.92} roughness={0.3} />
+          </mesh>
+          <mesh position={[0, 0.16, 0]}>
+            <boxGeometry args={[0.77, 0.1, 0.92]} />
+            <meshStandardMaterial color="#8f9498" metalness={0.85} roughness={0.4} />
+          </mesh>
+          <mesh position={[0, 0.1, 0.46]}>
+            <boxGeometry args={[0.6, 0.03, 0.02]} />
+            <meshStandardMaterial color="#2a2a2a" />
+          </mesh>
+        </group>
+      );
+    case "ws2812":
+      // WS2812B: 5mm square white substrate, 4 corner pads, RGB die
+      return (
+        <group>
+          <mesh position={[0, 0.045, 0]} castShadow>
+            <boxGeometry args={[0.5, 0.09, 0.5]} />
+            <meshStandardMaterial color="#efe9da" roughness={0.5} />
+          </mesh>
+          {[
+            [-0.25, 0],
+            [0.25, 0],
+          ].map(([x, z], i) => (
+            <mesh key={i} position={[x, 0.045, z]}>
+              <boxGeometry args={[0.06, 0.08, 0.4]} />
+              <meshStandardMaterial color={metal} metalness={0.85} roughness={0.3} />
+            </mesh>
+          ))}
+          {[
+            [0, -0.25],
+            [0, 0.25],
+          ].map(([x, z], i) => (
+            <mesh key={i} position={[x, 0.045, z]}>
+              <boxGeometry args={[0.4, 0.08, 0.06]} />
+              <meshStandardMaterial color={metal} metalness={0.85} roughness={0.3} />
+            </mesh>
+          ))}
+          <Ws2812Die active={lit} />
+        </group>
+      );
+    case "jumper":
+      // breadboard jumper wire: colored flexible lead arcing between pins
+      return (
+        <group>
+          {/* plastic caps at both ends */}
+          {[-0.55, 0.55].map((x) => (
+            <group key={x}>
+              <mesh position={[x, 0.07, 0]} castShadow>
+                <boxGeometry args={[0.2, 0.14, 0.2]} />
+                <meshStandardMaterial color={part.color ?? "#d64b3a"} roughness={0.55} />
+              </mesh>
+              <mesh position={[x, 0.02, 0]}>
+                <cylinderGeometry args={[0.018, 0.018, 0.1, 8]} />
+                <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+              </mesh>
+            </group>
+          ))}
+          {/* flexible lead: half-torus arc bowing upward between the caps */}
+          <mesh position={[0, 0.07, 0]}>
+            <torusGeometry args={[0.55, 0.026, 8, 32, Math.PI]} />
+            <meshStandardMaterial color={part.color ?? "#d64b3a"} roughness={0.6} />
+          </mesh>
+        </group>
+      );
+    case "to92":
+      // 2N2222A TO-92: half-cylinder black cap, flat face, 3 leads
+      return (
+        <group>
+          <mesh position={[0, 0.15, 0]} rotation={[0, -Math.PI / 2, 0]} castShadow>
+            <cylinderGeometry args={[0.16, 0.16, 0.3, 20, 1, false, 0, Math.PI]} />
+            <meshStandardMaterial color="#141414" roughness={0.45} />
+          </mesh>
+          <mesh position={[0, 0.15, -0.075]} castShadow>
+            <boxGeometry args={[0.3, 0.32, 0.02]} />
+            <meshStandardMaterial color="#141414" roughness={0.45} />
+          </mesh>
+          {[-0.07, 0, 0.07].map((x) => (
+            <mesh key={x} position={[x, 0.05, 0]}>
+              <cylinderGeometry args={[0.016, 0.016, 0.14, 8]} />
+              <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+            </mesh>
+          ))}
+        </group>
+      );
+    case "diode":
+      // 1N4007 axial: black epoxy cylinder with the silver cathode band
+      return (
+        <group>
+          <mesh position={[0, 0.12, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[0.1, 0.1, 0.34, 16]} />
+            <meshStandardMaterial color="#181818" roughness={0.4} />
+          </mesh>
+          <mesh position={[0.13, 0.12, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.102, 0.102, 0.045, 16]} />
+            <meshStandardMaterial color="#d9dde0" metalness={0.8} roughness={0.3} />
+          </mesh>
+          {[-0.26, 0.26].map((x) => (
+            <mesh key={x} position={[x, 0.12, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.018, 0.018, 0.18, 8]} />
+              <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+            </mesh>
+          ))}
+        </group>
+      );
+    case "relay":
+      // SRD-05VDC cube relay: blue plastic cover over black base
+      return (
+        <group>
+          <mesh position={[0, 0.24, 0]} castShadow>
+            <boxGeometry args={[0.95, 0.48, 0.8]} />
+            <meshStandardMaterial color="#2a5fc8" roughness={0.5} />
+          </mesh>
+          <mesh position={[0, 0.03, 0]}>
+            <boxGeometry args={[0.98, 0.06, 0.83]} />
+            <meshStandardMaterial color="#0e0e0e" roughness={0.55} />
+          </mesh>
+          {/* pin field along the bottom */}
+          {[-0.35, -0.15, 0.05, 0.25, 0.4].map((x, i) => (
+            <mesh key={i} position={[x, 0.0, i % 2 ? 0.28 : -0.28]}>
+              <boxGeometry args={[0.07, 0.1, 0.07]} />
+              <meshStandardMaterial color={metal} metalness={0.85} roughness={0.3} />
+            </mesh>
+          ))}
+          {/* clicking contact armature + load indicator while the coil is driven */}
+          <group position={[0, 0.49, 0]}>
+            <RelayArm active={lit} />
+          </group>
+          <RelayIndicator active={lit} />
+        </group>
+      );
+    case "screw":
+      // 2-position screw terminal block: green phenolic + brass screws
+      return (
+        <group>
+          <mesh position={[0, 0.12, 0]} castShadow>
+            <boxGeometry args={[0.85, 0.24, 0.45]} />
+            <meshStandardMaterial color="#2f8f4e" roughness={0.55} />
+          </mesh>
+          {[-0.2, 0.2].map((x) => (
+            <group key={x}>
+              <mesh position={[x, 0.26, 0]} castShadow>
+                <cylinderGeometry args={[0.09, 0.09, 0.08, 12]} />
+                <meshStandardMaterial color="#c9a227" metalness={0.9} roughness={0.35} />
+              </mesh>
+              <mesh position={[x, 0.26, 0]} rotation={[0, 0, Math.PI / 2]}>
+                <boxGeometry args={[0.05, 0.02, 0.14]} />
+                <meshStandardMaterial color="#7a6215" metalness={0.7} roughness={0.4} />
+              </mesh>
+            </group>
+          ))}
+          {/* wire entry holes on the side */}
+          {[-0.2, 0.2].map((x) => (
+            <mesh key={x} position={[x, 0.1, 0.23]} rotation={[-Math.PI / 2, 0, 0]}>
+              <circleGeometry args={[0.055, 12]} />
+              <meshStandardMaterial color="#0c1a0f" />
+            </mesh>
+          ))}
+        </group>
+      );
+    case "transducer":
+      // HC-SR04 16mm aluminium can: mesh face + rolled rim
+      return (
+        <group>
+          <mesh position={[0, 0.32, 0]} castShadow>
+            <cylinderGeometry args={[0.42, 0.42, 0.62, 24]} />
+            <meshStandardMaterial color="#b9bec2" metalness={0.92} roughness={0.28} />
+          </mesh>
+          {/* silver mesh radiating face (top) */}
+          <mesh position={[0, 0.635, 0]}>
+            <cylinderGeometry args={[0.415, 0.415, 0.01, 24]} />
+            <meshStandardMaterial color="#d4d8db" metalness={0.95} roughness={0.55} />
+          </mesh>
+          {/* mesh grid relief */}
+          {[-0.2, 0, 0.2].map((o) => (
+            <mesh
+              key={`x${o}`}
+              position={[0, 0.641, o]}
+              rotation={[0, 0, Math.PI / 2]}
+            >
+              <boxGeometry args={[0.83, 0.004, 0.02]} />
+              <meshStandardMaterial color="#8a9096" metalness={0.9} roughness={0.4} />
+            </mesh>
+          ))}
+          {[-0.2, 0, 0.2].map((o) => (
+            <mesh key={`z${o}`} position={[o, 0.641, 0]} rotation={[0, Math.PI / 2, 0]}>
+              <boxGeometry args={[0.83, 0.004, 0.02]} />
+              <meshStandardMaterial color="#8a9096" metalness={0.9} roughness={0.4} />
+            </mesh>
+          ))}
+          {/* rolled rim ring */}
+          <mesh position={[0, 0.03, 0]}>
+            <cylinderGeometry args={[0.44, 0.44, 0.06, 24]} />
+            <meshStandardMaterial color="#9fa4a8" metalness={0.9} roughness={0.35} />
+          </mesh>
+          {/* the T can emits the 40 kHz ping rings while the sketch runs */}
+          {part.id === "tx1" && <SonarWave active={lit} />}
+        </group>
+      );
     case "qfp":
       return (
         <group>
@@ -438,6 +803,66 @@ export function Geo({ part, lit }: { part: Part; lit: boolean }) {
         </group>
       );
     case "led":
+      if (!part.smd) {
+        // through-hole 5 mm LED: epoxy dome + flange + long wire leads
+        const ledE = lit ? 3.5 * energy : 0.08;
+        return (
+          <group>
+            {/* dome lens */}
+            <mesh position={[0, 0.16, 0]} castShadow>
+              <sphereGeometry args={[0.14, 20, 16]} />
+              <meshStandardMaterial
+                color={part.color ?? "#ff4136"}
+                transparent
+                opacity={0.85}
+                roughness={0.2}
+                emissive={part.color ?? "#ff4136"}
+                emissiveIntensity={ledE}
+              />
+            </mesh>
+            {/* cylindrical body below the dome */}
+            <mesh position={[0, 0.1, 0]} castShadow>
+              <cylinderGeometry args={[0.135, 0.135, 0.16, 20]} />
+              <meshStandardMaterial
+                color={part.color ?? "#ff4136"}
+                transparent
+                opacity={0.85}
+                roughness={0.25}
+                emissive={part.color ?? "#ff4136"}
+                emissiveIntensity={ledE}
+              />
+            </mesh>
+            {/* flange ring */}
+            <mesh position={[0, 0.035, 0]}>
+              <cylinderGeometry args={[0.185, 0.185, 0.05, 20]} />
+              <meshStandardMaterial
+                color={part.color ?? "#ff4136"}
+                transparent
+                opacity={0.9}
+                roughness={0.35}
+              />
+            </mesh>
+            {/* wire leads (anode longer) */}
+            {[
+              [-0.07, 0.16],
+              [0.07, 0.13],
+            ].map(([x, h], i) => (
+              <mesh key={i} position={[x, h / 2, 0]}>
+                <cylinderGeometry args={[0.016, 0.016, h, 8]} />
+                <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+              </mesh>
+            ))}
+            {lit && (
+              <pointLight
+                position={[0, 0.35, 0]}
+                distance={1.6 * energy + 0.4}
+                intensity={5 * energy}
+                color={part.color ?? "#ff4136"}
+              />
+            )}
+          </group>
+        );
+      }
       return (
         <group>
           {/* white ceramic body */}
@@ -949,21 +1374,46 @@ export function Geo({ part, lit }: { part: Part; lit: boolean }) {
   }
 }
 
+/** Charred-carbon finish the damaged part transitions to (Stage 2). */
+const CHAR_COLOR = new THREE.Color("#181414");
+/** Inner ember glow colour that fades as the husk cools. */
+const EMBER_COLOR = new THREE.Color("#ff3b00");
+
+type CharCapture = {
+  m: THREE.MeshStandardMaterial;
+  color: THREE.Color;
+  emissive: THREE.Color;
+  roughness: number;
+  metalness: number;
+  emissiveIntensity: number;
+};
+
 export function AnimatedPart({
   part,
   placed,
   explode,
   lit,
+  energy = 1,
+  charred = false,
   onHover,
 }: {
   part: Part;
   placed: boolean;
   explode: number;
   lit: boolean;
+  /** Output-energy factor 0..1 forwarded to the part geometry. */
+  energy?: number;
+  /** Stage 2 of the failure sequence: the part scorches to matte carbon. */
+  charred?: boolean;
   onHover: (s: string | null) => void;
 }) {
   const ref = useRef<THREE.Group>(null);
   const layer = part.smd ? 1 : part.kind === "hdr" ? 3 : 2;
+  // charring state (pure refs — no per-frame state updates)
+  const captured = useRef<CharCapture[] | null>(null);
+  const wasCharred = useRef(false);
+  const charT = useRef(0);
+
   useFrame((_, dt) => {
     const g = ref.current;
     if (!g) return;
@@ -973,6 +1423,65 @@ export function AnimatedPart({
     const s = placed ? 1 : 0.001;
     g.scale.setScalar(g.scale.x + (s - g.scale.x) * k);
     g.rotation.y += ((placed ? 0 : 2) - g.rotation.y) * k;
+
+    /* ---- Stage 2 · component charring + fading inner ember ---- */
+    if (charred && !wasCharred.current) {
+      wasCharred.current = true;
+      charT.current = 0;
+      if (!captured.current) {
+        const mats: CharCapture[] = [];
+        g.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          const m = (Array.isArray(mesh.material)
+            ? mesh.material[0]
+            : mesh.material) as THREE.MeshStandardMaterial | undefined;
+          if (m && (m as THREE.MeshStandardMaterial).color) {
+            mats.push({
+              m,
+              color: m.color.clone(),
+              emissive: m.emissive.clone(),
+              roughness: m.roughness,
+              metalness: m.metalness,
+              emissiveIntensity: m.emissiveIntensity,
+            });
+          }
+        });
+        captured.current = mats;
+      }
+    }
+    if (!charred && wasCharred.current) {
+      // repaired: restore the original finish
+      wasCharred.current = false;
+      captured.current?.forEach(
+        ({ m, color, emissive, roughness, metalness, emissiveIntensity }) => {
+          m.color.copy(color);
+          m.emissive.copy(emissive);
+          m.roughness = roughness;
+          m.metalness = metalness;
+          m.emissiveIntensity = emissiveIntensity;
+        },
+      );
+    }
+    if (charred && captured.current) {
+      charT.current += dt;
+      const t = charT.current;
+      // fast scorch: lerp every finish toward matte carbon (~0.3s)
+      const kk = 1 - Math.exp(-dt * 9);
+      captured.current.forEach(({ m }) => {
+        m.color.lerp(CHAR_COLOR, kk);
+        m.emissive.lerp(EMBER_COLOR, kk);
+        m.roughness += (1 - m.roughness) * kk;
+        m.metalness += (0.05 - m.metalness) * kk;
+      });
+      // ember glow decays over ~1.6s with a hot flicker, then dies out
+      const ember =
+        Math.max(0, 2.2 * Math.exp(-t * 1.6)) *
+        (0.8 + Math.sin(t * 23) * 0.2);
+      captured.current.forEach(({ m }) => {
+        m.emissiveIntensity = ember;
+      });
+    }
   });
   return (
     <group
@@ -985,7 +1494,7 @@ export function AnimatedPart({
       }}
       onPointerOut={() => onHover(null)}
     >
-      <Geo part={part} lit={lit} />
+      <Geo part={part} lit={lit} energy={energy} />
     </group>
   );
 }
@@ -1340,6 +1849,270 @@ function paintUnoSilk(ctx: CanvasRenderingContext2D, h: SilkCtx) {
   text("RoHS", X(3.2), Z(-1.78), 17, { weight: "700" });
 }
 
+/* ------------------------------------------------------------------ */
+/*  Board-style top surfaces (Fig. 02–05), painted instead of the      */
+/*  generic FR-4 artwork when the board name matches a style.          */
+/* ------------------------------------------------------------------ */
+
+type BoardStyleName = "breadboard" | "perfboard" | "devkit-narrow" | "hc-sr04";
+
+/** Board dimensions (units) and base mask colour per style. */
+export const STYLE_DIMS: Record<BoardStyleName, [number, number]> = {
+  breadboard: [4.7, 3.5],
+  perfboard: [5.2, 3.8],
+  "devkit-narrow": [6.2, 2.5],
+  "hc-sr04": [4.5, 2.0],
+};
+
+const STYLE_MASK: Record<BoardStyleName, string> = {
+  breadboard: "#f0ede2",
+  perfboard: "#a06a35",
+  "devkit-narrow": "#16181a",
+  "hc-sr04": "#1450a0",
+};
+
+/** Maps a board name to its physical style (Uno falls through to null). */
+export function boardStyleOf(title?: string): BoardStyleName | null {
+  if (!title) return null;
+  if (/LED \+ resistor/i.test(title)) return "breadboard";
+  if (/Transistor/i.test(title)) return "perfboard";
+  if (/ESP32/i.test(title)) return "devkit-narrow";
+  if (/Ultrasonic|HC-SR04/i.test(title)) return "hc-sr04";
+  return null;
+}
+
+type StyleCtx = {
+  layer: PcbLayer;
+  U: number;
+  H: number;
+  col: (hex: string, rough: number, a?: number) => string;
+  rng: () => number;
+  X: (x: number) => number;
+  Z: (z: number) => number;
+};
+
+type StylePainter = (ctx: CanvasRenderingContext2D, t: StyleCtx) => void;
+
+const paintStyleSurface: Record<BoardStyleName, StylePainter> = {
+  /* ---- Fig. 02 · 170-point solderless breadboard ---- */
+  breadboard: (ctx, t) => {
+    const { U, H, col, X, Z, rng } = t;
+    // cream ABS body
+    ctx.fillStyle = col("#f0ede2", 0.62);
+    ctx.fillRect(0, 0, U, H);
+    for (let i = 0; i < 9000; i++) {
+      ctx.fillStyle =
+        rng() < 0.5 ? col("#ffffff", 0.6, 0.06) : col("#b8b2a2", 0.62, 0.05);
+      ctx.fillRect(rng() * U, rng() * H, 2, 2);
+    }
+    // central DIP channel (recessed groove across the middle)
+    ctx.fillStyle = col("#c9c4b4", 0.5);
+    ctx.fillRect(0, Z(-0.19), U, Z(0.19) - Z(-0.19));
+    ctx.fillStyle = col("#8f8a7c", 0.45);
+    ctx.fillRect(0, Z(-0.09), U, Z(0.09) - Z(-0.09));
+    // tie-point grid: 2 banks of 5 rows × 17 columns
+    const pitchX = 0.262;
+    const x0 = -(16 * pitchX) / 2;
+    for (let c = 0; c < 17; c++) {
+      for (let r = 0; r < 5; r++) {
+        for (const s of [1, -1]) {
+          const x = X(x0 + c * pitchX);
+          const z = Z(s * (0.36 + r * 0.25));
+          ctx.fillStyle = col("#ddd8c8", 0.42);
+          ctx.fillRect(x - 7, z - 7, 14, 14);
+          ctx.fillStyle = col("#6f6a5e", 0.38);
+          ctx.fillRect(x - 3.5, z - 3.5, 7, 7);
+        }
+      }
+    }
+    // power rails: red (+) and blue (−) stripes with their own tie rows
+    for (const s of [1, -1]) {
+      const zLine = Z(s * 1.44);
+      ctx.fillStyle = s > 0 ? col("#c8372a", 0.5) : col("#2a5fc8", 0.5);
+      ctx.fillRect(U * 0.04, zLine - 4, U * 0.92, 8);
+      // "+" / "−" marks at both rail ends
+      ctx.fillStyle = col("#333", 0.6);
+      ctx.font = "700 26px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(s > 0 ? "+" : "\u2212", X(-2.28), zLine);
+      ctx.fillText(s > 0 ? "+" : "\u2212", X(2.28), zLine);
+      // rail tie rows (two rows flanking each stripe)
+      for (let c = 0; c < 20; c++) {
+        for (const dz of [0.17, 0.3]) {
+          const x = X(-2.28 + c * 0.24);
+          const z = Z(s * (1.44 + dz));
+          ctx.fillStyle = col("#ddd8c8", 0.42);
+          ctx.fillRect(x - 7, z - 7, 14, 14);
+          ctx.fillStyle = col("#6f6a5e", 0.38);
+          ctx.fillRect(x - 3.5, z - 3.5, 7, 7);
+        }
+      }
+    }
+    // molded edge highlights
+    ctx.strokeStyle = col("#ffffff", 0.55, 0.5);
+    ctx.lineWidth = 6;
+    ctx.strokeRect(6, 6, U - 12, H - 12);
+    if (t.layer === "color") {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, "rgba(0,0,0,0.05)");
+      g.addColorStop(0.5, "rgba(0,0,0,0)");
+      g.addColorStop(1, "rgba(0,0,0,0.08)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, U, H);
+    }
+  },
+
+  /* ---- Fig. 03 · phenolic perfboard with copper pad grid ---- */
+  perfboard: (ctx, t) => {
+    const { U, H, col, X, Z, rng } = t;
+    // tan phenolic (paper FR-2) substrate with fibre grain
+    ctx.fillStyle = col("#a06a35", 0.68);
+    ctx.fillRect(0, 0, U, H);
+    for (let i = 0; i < 12000; i++) {
+      ctx.fillStyle =
+        rng() < 0.5 ? col("#c98d4b", 0.68, 0.08) : col("#5f3c1c", 0.68, 0.07);
+      ctx.fillRect(rng() * U, rng() * H, 3, 1.5);
+    }
+    // copper pad grid on a 0.1" pitch (0.25 units), plated rings + drilled hole
+    const pitch = 0.25;
+    for (let x = -2.35; x <= 2.35; x += pitch) {
+      for (let z = -1.6; z <= 1.6; z += pitch) {
+        const cx = X(x);
+        const cy = Z(z);
+        ctx.beginPath();
+        ctx.arc(cx, cy, 8.5, 0, Math.PI * 2);
+        ctx.fillStyle = col("#b87333", 0.36);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx, cy, 3.2, 0, Math.PI * 2);
+        ctx.fillStyle = col("#171008", 0.85);
+        ctx.fill();
+      }
+    }
+    // a few hand-soldered copper links between neighbouring pads
+    const links: [number, number][] = [
+      [-1.1, 0.85], [0.15, -0.85], [-0.35, 1.35], [1.35, -0.35],
+    ];
+    ctx.strokeStyle = col("#b87333", 0.36, 0.9);
+    ctx.lineWidth = 7;
+    links.forEach(([x, z]) => {
+      ctx.beginPath();
+      ctx.moveTo(X(x), Z(z));
+      ctx.lineTo(X(x + pitch), Z(z));
+      ctx.stroke();
+    });
+    // slight edge wear
+    ctx.strokeStyle = col("#5f3c1c", 0.7, 0.6);
+    ctx.lineWidth = 5;
+    ctx.strokeRect(4, 4, U - 8, H - 8);
+  },
+
+  /* ---- Fig. 04 · matte-black ESP32-S3 DevKitC-1 ---- */
+  "devkit-narrow": (ctx, t) => {
+    const { U, H, col, X, Z, rng } = t;
+    // matte black soldermask with faint weave
+    ctx.fillStyle = col("#16181a", 0.42);
+    ctx.fillRect(0, 0, U, H);
+    for (let i = 0; i < 10000; i++) {
+      ctx.fillStyle =
+        rng() < 0.5 ? col("#2a2e33", 0.42, 0.05) : col("#000000", 0.42, 0.06);
+      ctx.fillRect(rng() * U, rng() * H, 1.5, 1.5);
+    }
+    // faint ghost traces under the black mask
+    ctx.strokeStyle = col("#8a97a5", 0.42, 0.10);
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 22; i++) {
+      const y = 90 + rng() * (H - 180);
+      ctx.beginPath();
+      ctx.moveTo(60 + rng() * 120, y);
+      ctx.bezierCurveTo(U * 0.35, y + 60 - rng() * 120, U * 0.6, y + 80 - rng() * 160, U - 60 - rng() * 120, y + 40 - rng() * 80);
+      ctx.stroke();
+    }
+    // twin 22-pin castellated header pad rows along both long edges
+    // (matches the hdr part pins: p.x=-0.1, pitch 0.25 → span -2.725…2.525)
+    for (const s of [1, -1]) {
+      for (let i = 0; i < 22; i++) {
+        const x = X(-2.725 + i * 0.25);
+        const y = Z(s * 1.0);
+        ctx.fillStyle = col("#d4af37", 0.26);
+        ctx.fillRect(x - 9, y - 9, 18, 18);
+        ctx.fillStyle = col("#0c0d0e", 0.9);
+        ctx.fillRect(x - 4, y - 4, 8, 8);
+      }
+    }
+    // silkscreen: title + key designators
+    ctx.fillStyle = col("#e8e6df", 0.8);
+    ctx.font = "800 40px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("ESP32-S3-DEVKITC-1", U / 2, H - 60);
+    ctx.font = "600 24px Arial";
+    ctx.fillText("REV A · 2026 · FCC ID 2AC7Z-ESP32S3", U / 2, H - 30);
+    ctx.font = "700 22px Arial";
+    ctx.fillText("GND  5V  3V3", X(-2.9), Z(0.35));
+    ctx.fillText("EN  GPIO0", X(2.75), Z(-0.35));
+  },
+
+  /* ---- Fig. 05 · blue HC-SR04 sonar board ---- */
+  "hc-sr04": (ctx, t) => {
+    const { U, H, col, X, Z, rng } = t;
+    const TAU = Math.PI * 2;
+    // classic glossy blue soldermask
+    ctx.fillStyle = col("#1450a0", 0.35);
+    ctx.fillRect(0, 0, U, H);
+    for (let i = 0; i < 9000; i++) {
+      ctx.fillStyle =
+        rng() < 0.5 ? col("#3d78c8", 0.35, 0.05) : col("#08245c", 0.35, 0.06);
+      ctx.fillRect(rng() * U, rng() * H, 1.5, 1.5);
+    }
+    // transducer footprints: big gold rings, front edge (x ≈ 1.7)
+    for (const s of [1, -1]) {
+      const cx = X(1.7);
+      const cy = Z(s * 0.85);
+      ctx.beginPath();
+      ctx.arc(cx, cy, 46, 0, TAU);
+      ctx.fillStyle = col("#d4af37", 0.26);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx, cy, 30, 0, TAU);
+      ctx.fillStyle = col("#08245c", 0.9);
+      ctx.fill();
+      // escape traces from each ring toward the driver ICs
+      ctx.strokeStyle = col("#d4af37", 0.26, 0.7);
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(cx - 46, cy);
+      ctx.lineTo(X(-0.1), cy + (s > 0 ? -30 : 30));
+      ctx.stroke();
+    }
+    // 4-pin right-angle header pads at the rear edge
+    // (matches the h1 part: n=4, pitch 0.25, centred on z=0)
+    for (let i = 0; i < 4; i++) {
+      const x = X(-1.95);
+      const y = Z(-0.375 + i * 0.25);
+      ctx.fillStyle = col("#d4af37", 0.26);
+      ctx.fillRect(x - 8, y - 8, 16, 16);
+      ctx.fillStyle = col("#08245c", 0.9);
+      ctx.fillRect(x - 3.5, y - 3.5, 7, 7);
+    }
+    // silkscreen
+    ctx.strokeStyle = col("#f3f0e6", 0.8);
+    ctx.fillStyle = col("#f3f0e6", 0.8);
+    ctx.font = "800 46px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("HC-SR04", X(-0.55), Z(0.0));
+    ctx.font = "700 26px Arial";
+    ctx.fillText("T", X(1.7), Z(1.42));
+    ctx.fillText("R", X(1.7), Z(-1.42));
+    ctx.font = "600 20px Arial";
+    ctx.fillText("VCC TRIG ECHO GND", X(-0.62), Z(-0.92));
+    ctx.font = "600 22px Arial";
+    ctx.fillText("5V DC · 2cm – 400cm", X(-0.62), Z(0.95));
+  },
+};
+
 /**
  * Paints one layer of the board. "color" is the albedo map, "rough" is a
  * grayscale roughness map (read from the green channel by three.js) built from
@@ -1378,8 +2151,19 @@ function paintPcb(
   // Board-unit → canvas mapping (canvas is square, painted via ctx.scale).
   // X(x)/Z(z) place content at board coordinates; Z follows the UV mapping in
   // <Pcb/> (uv.y = 0.5 - z/d with flipY upload ⇒ canvas top row ↔ +z edge).
-  const X = (x: number) => (x / 6.9 + 0.5) * U;
-  const Z = (z: number) => (0.5 + z / 5.3) * H;
+  const X = (x: number) => (x / size[0] + 0.5) * U;
+  const Z = (z: number) => (0.5 + z / size[1]) * H;
+
+  // Non-Uno board styles paint their own top surface and skip the generic
+  // PCB artwork below (trace routing, ENIG holes, Uno-style silkscreen).
+  const style = boardStyleOf(title);
+  if (style) {
+    ctx.save();
+    ctx.scale(1, k);
+    paintStyleSurface[style](ctx, { layer, U, H, col, rng, X, Z });
+    ctx.restore();
+    return;
+  }
 
   ctx.save();
   ctx.scale(1, k);
@@ -1884,6 +2668,148 @@ function buildUnoBoardGeometry(w: number, d: number): THREE.ExtrudeGeometry {
   return geo;
 }
 
+/** Metallic tie-point sockets for the 170-pt breadboard (Fig. 02). */
+function TiePoints() {
+  const ref = useRef<THREE.InstancedMesh>(null);
+  const pts = useMemo(() => {
+    const list: [number, number][] = [];
+    const pitchX = 0.262;
+    const x0 = -(16 * pitchX) / 2;
+    for (let c = 0; c < 17; c++) {
+      for (let r = 0; r < 5; r++) {
+        for (const s of [1, -1]) {
+          list.push([x0 + c * pitchX, s * (0.36 + r * 0.25)]);
+        }
+      }
+    }
+    for (let c = 0; c < 20; c++) {
+      const x = -2.28 + c * 0.24;
+      for (const dz of [0.17, 0.3]) {
+        list.push([x, 1.44 + dz]);
+        list.push([x, -(1.44 + dz)]);
+      }
+    }
+    return list;
+  }, []);
+  useEffect(() => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    const m = new THREE.Matrix4();
+    pts.forEach(([x, z], i) => {
+      m.setPosition(x, PCB_T / 2 + 0.012, z);
+      mesh.setMatrixAt(i, m);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  }, [pts]);
+  return (
+    <instancedMesh
+      ref={ref}
+      args={[undefined, undefined, pts.length]}
+      receiveShadow
+      castShadow
+    >
+      <boxGeometry args={[0.15, 0.05, 0.15]} />
+      <meshStandardMaterial color="#8a8a80" metalness={0.85} roughness={0.35} />
+    </instancedMesh>
+  );
+}
+
+/**
+ * Active-trace current-flow pulses. Each styled board gets a set of polylines
+ * routed through its real part positions (power in → load → return); glowing
+ * electron pulses travel along them while the board is powered, and the whole
+ * group unmounts (halting instantly) the moment the circuit is broken.
+ */
+const FLOW_PATHS: Record<BoardStyleName, [number, number][][]> = {
+  breadboard: [
+    [[-2.2, 1.61], [2.2, 1.61]],                                  // red rail
+    [[2.2, -1.61], [-2.2, -1.61]],                                // blue rail
+    [[-2.2, 1.61], [-1.55, 1.61], [-1.55, 0.85], [-0.35, 0.35], [0.55, 0.35]], // feed → R1 → LED
+    [[0.55, 0.35], [0.55, -0.85], [-1.55, -0.85], [-1.55, -1.61], [-2.2, -1.61]], // return
+  ],
+  perfboard: [
+    [[-2.05, -1.25], [0, -0.3], [1.9, 0.75]],                     // 12 V through the relay coil
+    [[-0.9, 0.35], [0.45, 1.1]],                                  // base drive Q1 → R-B
+    [[0.45, 0.2], [-0.9, 0.35]],                                  // pull-down R-D → Q1
+    [[1.5, -0.55], [1.9, 0.75]],                                  // flyback loop D1 → coil
+  ],
+  "devkit-narrow": [
+    [[-2.75, 0.3], [-1.55, 0], [0.55, 0.15]],                     // COM USB → CP2102N → WROOM-1
+    [[-2.75, -0.3], [-1.55, 0]],                                  // OTG USB
+    [[-0.75, 0.85], [0.55, 0.15]],                                // AMS1117 3V3 rail
+    [[0.55, 0.15], [0.75, -0.85]],                                // WROOM-1 → WS2812
+    [[0.55, 0.15], [2.55, 0.55]],                                 // WROOM-1 → decoupling tank
+  ],
+  "hc-sr04": [
+    [[-1.95, 0], [-0.9, 0.5], [1.7, 0.85]],                       // header → MAX232 → T can
+    [[1.7, -0.85], [-0.9, -0.55]],                                // R can → LM324
+    [[-0.9, -0.55], [-0.9, 0.5]],                                 // LM324 → MAX232
+    [[0.55, 0.05], [-0.9, 0.5]],                                  // crystal timebase
+  ],
+};
+
+const PULSES_PER_PATH = 2;
+
+export function CurrentFlow({ style }: { style: BoardStyleName }) {
+  const g = useRef<THREE.Group>(null);
+  const paths = useMemo(() => FLOW_PATHS[style], [style]);
+  const lengths = useMemo(
+    () =>
+      paths.map((pts) => {
+        const seg: number[] = [];
+        let total = 0;
+        for (let i = 1; i < pts.length; i++) {
+          const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+          seg.push(l);
+          total += l;
+        }
+        return { seg, total };
+      }),
+    [paths],
+  );
+  useFrame(({ clock }) => {
+    if (!g.current) return;
+    const t = clock.elapsedTime;
+    g.current.children.forEach((child, i) => {
+      const pi = Math.floor(i / PULSES_PER_PATH);
+      const path = paths[pi];
+      const { seg, total } = lengths[pi];
+      const d = (((t * (0.5 + (pi % 3) * 0.14)) + (i % PULSES_PER_PATH) / PULSES_PER_PATH) % 1) * total;
+      let acc = 0;
+      let x = path[0][0];
+      let z = path[0][1];
+      for (let s = 0; s < seg.length; s++) {
+        if (d <= acc + seg[s]) {
+          const f = seg[s] > 0 ? (d - acc) / seg[s] : 0;
+          x = path[s][0] + (path[s + 1][0] - path[s][0]) * f;
+          z = path[s][1] + (path[s + 1][1] - path[s][1]) * f;
+          break;
+        }
+        acc += seg[s];
+      }
+      child.position.set(x, 0, z);
+      child.scale.setScalar(0.75 + Math.sin(t * 7 + i * 1.7) * 0.3);
+    });
+  });
+  const count = paths.length * PULSES_PER_PATH;
+  return (
+    <group ref={g} position={[0, PCB_T / 2 + 0.07, 0]}>
+      {Array.from({ length: count }).map((_, i) => (
+        <mesh key={i}>
+          <sphereGeometry args={[0.055, 10, 10]} />
+          <meshStandardMaterial
+            color="#ffe066"
+            emissive="#ffb300"
+            emissiveIntensity={2.6}
+            transparent
+            opacity={0.95}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 export function Pcb({
   color,
   explode,
@@ -1899,7 +2825,15 @@ export function Pcb({
 }) {
   const ref = useRef<THREE.Group>(null);
   const boxRef = useRef<THREE.Mesh>(null);
-  const [w, d] = generic ? [4, 2.6] : [6.9, 5.3];
+  const style = !generic && !!boardName ? boardStyleOf(boardName) : null;
+  const [w, d] = generic
+    ? [4, 2.6]
+    : style
+      ? STYLE_DIMS[style]
+      : [6.9, 5.3];
+  // styled boards force their authentic base colour (breadboard plastic,
+  // black devkit mask, HC-SR04 blue); the Uno keeps the bench colour picker
+  const maskColor = style ? STYLE_MASK[style] : color;
   const title = generic ?? boardName ?? "ROBOTICS BENCH";
   const isUno = !generic && !!boardName && /uno/i.test(boardName);
   const labels = (isUno && !pinLabels ? UNO_PIN_LABELS : pinLabels) ?? [];
@@ -1919,10 +2853,10 @@ export function Pcb({
   );
 
   const textures = useMemo(
-    () => createPcbTexture(color, title, labels, [w, d], isUno),
+    () => createPcbTexture(maskColor, title, labels, [w, d], isUno),
     // pinLabels is tracked through labelKey so an inline array doesn't rebuild the canvas every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [color, title, labelKey, w, d, isUno],
+    [maskColor, title, labelKey, w, d, isUno],
   );
   useEffect(
     () => () => {
@@ -1991,6 +2925,7 @@ export function Pcb({
           </mesh>
         </group>
       )}
+      {style === "breadboard" && <TiePoints />}
     </group>
   );
 }

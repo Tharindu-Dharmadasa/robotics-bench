@@ -20,9 +20,11 @@ import * as THREE from "three";
 
 import {
   AnimatedPart,
+  CurrentFlow,
   Pcb,
   SolderJoints,
   UsbCable,
+  boardStyleOf,
   matchGlbPart,
   normPartName,
 } from "./PartGeometry";
@@ -420,108 +422,292 @@ class GlbBoardFallback extends Component<
   }
 }
 
-/* ---------- Fault visual effects ---------- */
+/* ---------- 4-stage electrical failure sequence ---------- */
 
-const SMOKE_COUNT = 6;
+const SPARK_COUNT = 12;
+const SMOKE_PUFFS = 14;
+
+// shared scratch vectors (avoid per-frame allocation)
+const _sparkV = new THREE.Vector3();
+const _sparkUp = new THREE.Vector3(0, 1, 0);
 
 /**
- * Glowing / charred shell over the damaged part plus rising translucent gray
- * smoke spheres. Only plain meshes are used (no drei <Html>/<Text>).
+ * Stage 4 · Web Audio electrical pop + sizzle, played once per burnout.
+ * Wrapped in try/catch: autoplay policies and missing AudioContext are silent.
+ */
+function playBurnoutSound() {
+  try {
+    const AC =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const now = ctx.currentTime;
+
+    // low "pop" thump: fast pitch-dropping sine
+    const pop = ctx.createOscillator();
+    pop.type = "sine";
+    pop.frequency.setValueAtTime(220, now);
+    pop.frequency.exponentialRampToValueAtTime(38, now + 0.12);
+    const popGain = ctx.createGain();
+    popGain.gain.setValueAtTime(0.5, now);
+    popGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+    pop.connect(popGain).connect(ctx.destination);
+    pop.start(now);
+    pop.stop(now + 0.18);
+
+    // "sizzle": decaying band-passed noise burst
+    const dur = 0.7;
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++)
+      data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    const noise = ctx.createBufferSource();
+    noise.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 3800;
+    bp.Q.value = 0.8;
+    const sizzleGain = ctx.createGain();
+    sizzleGain.gain.setValueAtTime(0.28, now + 0.02);
+    sizzleGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    noise.connect(bp).connect(sizzleGain).connect(ctx.destination);
+    noise.start(now + 0.02);
+
+    window.setTimeout(() => ctx.close().catch(() => {}), 1500);
+  } catch {
+    // autoplay blocked or Web Audio unavailable — stay silent
+  }
+}
+
+/**
+ * Drives the whole failure sequence from one useFrame timeline (no state):
+ *   0–0.3s   arc flash + 12 ballistic spark streaks with gravity
+ *   0–1.6s   part chars to carbon with a fading ember (handled in AnimatedPart)
+ *   0.15–3s  helical wispy smoke plume
+ *   forever  soft radial scorch decal on the PCB, until repair
  */
 function FaultOverlay({
   part,
   explode,
-  damaged,
 }: {
   part: Part;
   explode: number;
-  damaged: boolean;
 }) {
   const root = useRef<THREE.Group>(null);
-  const shell = useRef<THREE.Mesh>(null);
-  const glow = useRef<THREE.PointLight>(null);
+  const flash = useRef<THREE.PointLight>(null);
+  const emberLight = useRef<THREE.PointLight>(null);
+  const sparks = useRef<THREE.Group>(null);
   const smoke = useRef<THREE.Group>(null);
+  const age = useRef(0);
   const layer = part.smd ? 1 : part.kind === "hdr" ? 3 : 2;
 
-  useFrame((state, dt) => {
-    const g = root.current;
-    if (!g) return;
-    const t = state.clock.elapsedTime;
+  // spark ballistics: initial velocities, biased upward and outward
+  const sparkState = useMemo(
+    () =>
+      Array.from({ length: SPARK_COUNT }, () => {
+        const a = Math.random() * Math.PI * 2;
+        return {
+          x: (Math.random() - 0.5) * 0.1,
+          y: 0.15,
+          z: (Math.random() - 0.5) * 0.1,
+          vx: Math.cos(a) * (0.8 + Math.random() * 2.2),
+          vy: 2.5 + Math.random() * 3.5,
+          vz: Math.sin(a) * (0.8 + Math.random() * 2.2),
+        };
+      }),
+    [],
+  );
 
-    // Ease the whole overlay down onto the part (and follow the exploded view).
-    const ty = PCB_T / 2 + explode * layer * 1.1;
-    const k = 1 - Math.exp(-dt * 7);
-    g.position.y += (ty - g.position.y) * k;
-    g.scale.setScalar(g.scale.x + (1 - g.scale.x) * k);
-
-    // Pulsing red-hot glow on the charred shell.
-    const pulse = 1.4 + Math.sin(t * 9) * 0.6;
-    if (shell.current) {
-      const m = shell.current.material as THREE.MeshStandardMaterial;
-      m.emissiveIntensity = pulse;
+  // soft radial scorch decal texture (drawn once on a tiny canvas)
+  const scorchTex = useMemo(() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const ctx2 = c.getContext("2d");
+    if (ctx2) {
+      const g = ctx2.createRadialGradient(32, 32, 2, 32, 32, 32);
+      g.addColorStop(0, "rgba(8,6,4,0.92)");
+      g.addColorStop(0.55, "rgba(12,9,7,0.55)");
+      g.addColorStop(1, "rgba(12,9,7,0)");
+      ctx2.fillStyle = g;
+      ctx2.fillRect(0, 0, 64, 64);
     }
-    if (glow.current) glow.current.intensity = 1.2 + Math.sin(t * 9) * 0.5;
+    return new THREE.CanvasTexture(c);
+  }, []);
+  useEffect(() => () => scorchTex.dispose(), [scorchTex]);
 
-    // Rising, drifting, fading smoke.
+  useFrame((_, dt) => {
+    age.current += dt;
+    const a = age.current;
+
+    // ease the whole overlay down onto the part (and follow the exploded view)
+    const g = root.current;
+    if (g) {
+      const ty = PCB_T / 2 + explode * layer * 1.1;
+      const k = 1 - Math.exp(-dt * 7);
+      g.position.y += (ty - g.position.y) * k;
+      g.scale.setScalar(g.scale.x + (1 - g.scale.x) * k);
+    }
+
+    /* Stage 1 · arc flash — bright orange-white, decays within 0.3s */
+    if (flash.current) {
+      const f = Math.max(0, 1 - a / 0.3);
+      flash.current.intensity = 60 * f * f;
+      flash.current.visible = f > 0.01;
+    }
+
+    /* Stage 1 · ballistic sparks: gravity, streak orientation, fade */
+    if (sparks.current) {
+      const alive = a < 1.1;
+      sparks.current.visible = alive;
+      if (alive) {
+        sparks.current.children.forEach((c, i) => {
+          const s = sparkState[i];
+          s.vy -= 12 * dt;
+          s.x += s.vx * dt;
+          s.y += s.vy * dt;
+          s.z += s.vz * dt;
+          if (s.y < 0.03 && s.vy < 0) {
+            // settle on the board surface
+            s.y = 0.03;
+            s.vy = 0;
+            s.vx *= 0.86;
+            s.vz *= 0.86;
+          }
+          c.position.set(s.x, s.y, s.z);
+          _sparkV.set(s.vx, s.vy, s.vz);
+          if (_sparkV.lengthSq() > 1e-6)
+            (c as THREE.Mesh).quaternion.setFromUnitVectors(
+              _sparkUp,
+              _sparkV.normalize(),
+            );
+          const m = (c as THREE.Mesh).material as THREE.MeshStandardMaterial;
+          m.opacity = 0.95 * Math.max(0, 1 - a / 1.0);
+        });
+      }
+    }
+
+    /* Stage 2 · ember light while the charred husk cools */
+    if (emberLight.current) {
+      const e = Math.max(0, 1.6 * Math.exp(-a * 1.6));
+      emberLight.current.intensity = e;
+      emberLight.current.visible = e > 0.02;
+    }
+
+    /* Stage 3 · helical smoke plume, ~3 seconds after failure */
     if (smoke.current) {
-      smoke.current.children.forEach((c, i) => {
-        const phase = (t * 0.35 + i / SMOKE_COUNT) % 1;
-        c.position.y = 0.25 + phase * 1.7;
-        c.position.x = Math.sin((t + i * 2) * 1.7) * 0.12;
-        c.position.z = Math.cos((t + i * 1.3) * 1.3) * 0.08;
-        c.scale.setScalar((0.1 + phase * 0.28) / 0.16);
-        const m = (c as THREE.Mesh).material as THREE.MeshStandardMaterial;
-        m.opacity = 0.34 * (1 - phase);
-      });
+      const sa = a - 0.15;
+      const alive = sa > 0 && sa < 3.2;
+      smoke.current.visible = alive;
+      if (alive) {
+        const globalFade = Math.min(1, Math.max(0, (3.2 - sa) / 0.8));
+        smoke.current.children.forEach((c, i) => {
+          const p = (sa * 0.5 + i / SMOKE_PUFFS) % 1;
+          const r = 0.06 + p * 0.3;
+          const ang = p * Math.PI * 4 + i * 1.9;
+          c.position.set(Math.sin(ang) * r, p * 2.4, Math.cos(ang) * r);
+          c.scale.setScalar(0.5 + p * 1.4);
+          const m = (c as THREE.Mesh).material as THREE.MeshStandardMaterial;
+          m.opacity = 0.28 * (1 - p) * globalFade;
+        });
+      }
     }
   });
 
   return (
     <group ref={root} position={[part.p[0], 7, part.p[1]]} scale={0.001}>
-      {damaged && (
-        <>
-          {/* charred body */}
-          <mesh ref={shell} position={[0, 0.12, 0]}>
-            <sphereGeometry args={[0.3, 20, 16]} />
+      {/* Stage 1 · arc flash */}
+      <pointLight
+        ref={flash}
+        position={[0, 0.35, 0]}
+        color="#fff3d6"
+        intensity={60}
+        distance={6}
+        decay={2}
+        visible={false}
+      />
+      {/* Stage 1 · 12 glowing spark streaks */}
+      <group ref={sparks}>
+        {Array.from({ length: SPARK_COUNT }).map((_, i) => (
+          <mesh key={i}>
+            <boxGeometry args={[0.018, 0.14, 0.018]} />
             <meshStandardMaterial
-              color="#1a0a08"
-              emissive="#ff2a1a"
-              emissiveIntensity={1.4}
-              roughness={0.95}
-            />
-          </mesh>
-          {/* soot ring on the board */}
-          <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[0.2, 0.46, 24]} />
-            <meshStandardMaterial
-              color="#0d0807"
+              color="#ffbe3b"
+              emissive="#ffbe3b"
+              emissiveIntensity={3}
               transparent
-              opacity={0.75}
-              depthWrite={false}
-            />
-          </mesh>
-          <pointLight
-            ref={glow}
-            position={[0, 0.4, 0]}
-            color="#ff5533"
-            intensity={1.6}
-            distance={2.2}
-          />
-        </>
-      )}
-      <group ref={smoke}>
-        {Array.from({ length: SMOKE_COUNT }, (_, i) => (
-          <mesh key={i} position={[0, 0.3, 0]}>
-            <sphereGeometry args={[0.16, 14, 12]} />
-            <meshStandardMaterial
-              color="#8a8a8a"
-              transparent
-              opacity={0.3}
+              opacity={0.95}
               depthWrite={false}
             />
           </mesh>
         ))}
       </group>
+      {/* Stage 2 · ember glow light while the husk cools */}
+      <pointLight
+        ref={emberLight}
+        position={[0, 0.3, 0]}
+        color="#ff3b00"
+        intensity={1.6}
+        distance={2.4}
+        visible={false}
+      />
+      {/* Stage 2 · soft radial scorch mark on the PCB (stays until repair) */}
+      <mesh position={[0, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.75, 32]} />
+        <meshBasicMaterial map={scorchTex} transparent depthWrite={false} />
+      </mesh>
+      {/* Stage 3 · 14 wispy helical smoke puffs */}
+      <group ref={smoke} visible={false}>
+        {Array.from({ length: SMOKE_PUFFS }).map((_, i) => (
+          <mesh key={i}>
+            <sphereGeometry args={[0.14, 10, 10]} />
+            <meshStandardMaterial
+              color="#6e6e6e"
+              transparent
+              opacity={0.28}
+              depthWrite={false}
+              roughness={1}
+            />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
+/* ---------- Live UART activity LEDs (Fig. 04 CP2102N bridge) ---------- */
+
+/**
+ * TX/RX indicator dots beside the USB-UART bridge. They pulse in anti-phase
+ * at the serial log cadence while the devkit sketch is running.
+ */
+function UartLeds({ active }: { active: boolean }) {
+  const g = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    if (!g.current) return;
+    const t = clock.elapsedTime;
+    g.current.children.forEach((c, i) => {
+      const m = (c as THREE.Mesh).material as THREE.MeshStandardMaterial;
+      const phase = t * 2.2 + i * Math.PI;
+      m.emissiveIntensity = active ? 1.6 + Math.sin(phase) * 1.4 : 0.1;
+    });
+  });
+  return (
+    <group position={[0, PCB_T / 2 + 0.02, 0]}>
+      {[
+        { x: -1.32, z: 0.3, c: "#ffb300" },
+        { x: -1.78, z: -0.3, c: "#7fd4ff" },
+      ].map((p, i) => (
+        <mesh key={i} position={[p.x, 0.1, p.z]}>
+          <sphereGeometry args={[0.045, 10, 10]} />
+          <meshStandardMaterial
+            color="#fff2cf"
+            emissive={p.c}
+            emissiveIntensity={0.1}
+          />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -540,6 +726,10 @@ interface Viewport3DProps {
   count: number;
   total: number;
   status: SimStatus;
+  /** True while the board's sketch is running (drives live animations). */
+  running: boolean;
+  /** Configured part values (e.g. resistor value → LED brightness). */
+  values: Record<string, string>;
   /** Structured fault driving the HUD banner + burn visuals. */
   eduFault: EduFault | null;
   /** Bench view: interactive procedural parts vs real CAD (.glb). */
@@ -571,6 +761,8 @@ export default function Viewport3D({
   count,
   total,
   status,
+  running,
+  values,
   eduFault,
   viewMode,
   onRemovePart,
@@ -610,8 +802,28 @@ export default function Viewport3D({
     : undefined;
   const hasUsbPort = parts.some((p) => p.kind === "usb");
 
+  // Stage 4 · electrical pop + sizzle, once per burnout fault. The useEffect
+  // dep on the whole fault object (keyed remounts) guarantees a single play.
+  useEffect(() => {
+    if (eduFault?.severity === "burnout") playBurnoutSound();
+  }, [eduFault]);
+
   // Solder joints follow only the parts that are actually on the board.
   const placedParts = parts.filter((p) => placed.has(p.id));
+
+  // Live circuit: fully assembled, soldered, powered and un-broken. Every
+  // current-flow animation keys off this, so any removed part (=> fault or
+  // desoldered joint) halts the pulses immediately. A degraded warning (e.g.
+  // 10kΩ starved LED) keeps the circuit alive.
+  const style = boardStyleOf(spec.name);
+  const flow =
+    usb &&
+    soldered &&
+    count === total &&
+    (!eduFault || eduFault.severity === "degraded");
+
+  // A 10kΩ starves the LED branch — the dome glows dimly instead of bright.
+  const dimLed = (values["r1"] ?? "").includes("10kΩ");
 
   // Optional per-board pin labels for the silkscreen (falls back to Uno-style labels).
   const pinLabels = (spec as BoardSpec & { pinLabels?: string[] }).pinLabels;
@@ -628,6 +840,8 @@ export default function Viewport3D({
       {parts.length > 0 && (
         <>
           <SolderJoints show={soldered} explode={explode} parts={placedParts} />
+          {style && flow && <CurrentFlow style={style} />}
+          {style === "devkit-narrow" && <UartLeds active={flow && running} />}
           {parts.map((p) => (
             <group
               key={`${spec.id}-${p.id}-click`}
@@ -642,6 +856,8 @@ export default function Viewport3D({
                 placed={placed.has(p.id)}
                 explode={explode}
                 lit={litMap(p.id)}
+                energy={p.kind === "led" && !p.smd && dimLed ? 0.22 : 1}
+                charred={burnPart?.id === p.id && eduFault?.severity === "burnout"}
                 onHover={onHover}
               />
             </group>
@@ -704,7 +920,6 @@ export default function Viewport3D({
             key={`${spec.id}-${burnPart.id}-fault`}
             part={burnPart}
             explode={explode}
-            damaged={placed.has(burnPart.id)}
           />
         )}
         <mesh
