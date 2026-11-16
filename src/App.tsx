@@ -16,6 +16,7 @@ import ControlColumn, { type BenchAction, type ViewMode } from "./components/Con
 import Sidebar from "./components/Sidebar";
 import Viewport3D, { type EduFault } from "./components/Viewport3D";
 import { BOARD_SPECS } from "./data/boards";
+import { getBoardTelemetryLine } from "./data/telemetry";
 import type { BoardSpec, FaultRule, Part, PartEffect, SimStatus } from "./types/simulator";
 
 /**
@@ -35,44 +36,6 @@ const initialValues = (spec: BoardSpec) =>
   Object.fromEntries(
     spec.parts.filter((p) => p.value).map((p) => [p.id, p.value!]),
   );
-
-/**
- * Board-specific serial telemetry for one 500 ms tick of the running sketch:
- * Fig. 02 prints LED current (value-aware), Fig. 03 the relay switch state,
- * Fig. 04 WiFi/RGB activity, Fig. 05 echo ranging. Any other board keeps the
- * classic Blink heartbeat.
- */
-function boardTelemetry(
-  boardId: number,
-  on: boolean,
-  ms: number,
-  values: Record<string, string>,
-): string {
-  const ts = `[${(ms / 1000).toFixed(1).padStart(5, " ")}s]`;
-  switch (boardId) {
-    case 2: {
-      if (!on) return `${ts} LED OFF · I = 0 mA`;
-      const r = (values["r1"] ?? "").toLowerCase();
-      if (r.includes("10k")) return `${ts} LED ON · I = 0.3 mA (Dim)`;
-      if (r.startsWith("10")) return `${ts} LED ON · I = 300 mA (OVERCURRENT)`;
-      return `${ts} LED ON · I = 14.5 mA (220Ω)`;
-    }
-    case 3:
-      return on
-        ? `${ts} D9 HIGH → 2N2222 SATURATED → Relay Load ON (12V)`
-        : `${ts} Relay OFF`;
-    case 4:
-      return `${ts} Core ${Math.round(ms / 500) % 2}/1: WiFi RSSI ${
-        -52 - Math.round(Math.random() * 8)
-      } dBm · GPIO48 RGB Pulse`;
-    case 5: {
-      const echo = Math.round(500 + Math.random() * 14000);
-      return `${ts} HC-SR04 Ping: Echo ${echo} µs → Distance: ${(echo / 58).toFixed(1)} cm`;
-    }
-    default:
-      return `${ts} ${on ? "LED ON" : "LED OFF"}`;
-  }
-}
 
 export default function App() {
   const [board, setBoard] = useState(0);
@@ -99,7 +62,7 @@ export default function App() {
   const [flick, setFlick] = useState(false);
   const [explode, setExplode] = useState(0);
   /** Sonar target distance (cm) from the lab instrument panel, shared with the 3D reflector. */
-  const [targetDistance, setTargetDistance] = useState(30);
+  const [targetDistance, setTargetDistance] = useState(25);
   /** Fig. 03 · lifted D9 pin state (true = 5 V base drive, relay closed). */
   const [d9High, setD9High] = useState(false);
   /** 3D jumper-wire + current-flow overlay toggle (ControlColumn switch). */
@@ -108,6 +71,10 @@ export default function App() {
   // live mirror of `values` for the telemetry interval (no timer restarts)
   const valuesRef = useRef(values);
   valuesRef.current = values;
+  const targetDistanceRef = useRef(targetDistance);
+  targetDistanceRef.current = targetDistance;
+  const d9HighRef = useRef(d9High);
+  d9HighRef.current = d9High;
 
   const activeBoard = BOARD_SPECS[board];
   const parts = activeBoard.parts;
@@ -145,6 +112,7 @@ export default function App() {
     setFlick(false);
     setHover(null);
     setD9High(false);
+    setTargetDistance(25);
     setValues(initialValues(spec));
     setLogs([
       `> Fig. ${String(index + 1).padStart(2, "0")} — ${spec.name} loaded. Place the remaining parts.`,
@@ -189,22 +157,30 @@ export default function App() {
       setBlink(false);
       return;
     }
-    // values are read through a ref inside the tick, so changing a resistor
-    // mid-run doesn't restart the blink cycle — it just changes what the next
-    // telemetry line prints.
+    // values, targetDistance, and d9 are read through refs inside the tick, so
+    // live slider adjustments mid-run update the next telemetry line immediately.
     let on = false;
     let ms = 0;
+    let tick = 0;
     const id = setInterval(() => {
       on = !on;
+      tick++;
       ms += 500;
       setBlink(on);
       setFlick(true);
       setTimeout(() => setFlick(false), 80);
-      log(boardTelemetry(activeBoard.id, on, ms, valuesRef.current));
+      log(
+        getBoardTelemetryLine(board, tick, {
+          on,
+          ms,
+          values: valuesRef.current,
+          targetDistance: targetDistanceRef.current,
+          d9High: d9HighRef.current,
+        }),
+      );
     }, 500);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, activeBoard.id]);
+  }, [running, board]);
 
   useEffect(() => {
     logRef.current?.scrollTo(0, logRef.current.scrollHeight);

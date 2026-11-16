@@ -51,7 +51,7 @@ void loop() {
       errorMessage:
         "BURNOUT: Flyback diodes missing — motor back-EMF destroyed the L298N H-bridge!",
       criticalPart: "l298n_ic",
-      criticalParts: ["l298n_ic", "diodes_flyback", "j5v"],
+      criticalParts: ["l298n_ic", "diodes_left", "diodes_right", "j5v"],
     },
     parts: [
       {

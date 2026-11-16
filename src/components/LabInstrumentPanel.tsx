@@ -346,7 +346,7 @@ function SonarRanger({
   targetDistance,
   onTargetDistance,
 }: Pick<LabInstrumentPanelProps, "targetDistance" | "onTargetDistance">) {
-  const echoUs = Math.round(targetDistance * 58); // 58 µs per cm round-trip
+  const echoUs = Math.round(targetDistance * 58.31); // speed of sound ≈ 343 m/s round-trip
   return (
     <>
       <Lcd>
