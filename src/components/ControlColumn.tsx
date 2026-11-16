@@ -4,6 +4,8 @@ import type { LucideIcon } from "lucide-react";
 
 import { COLORS } from "../data/boards";
 import type { Part } from "../types/simulator";
+import LabInstrumentPanel from "./LabInstrumentPanel";
+import type { EduFault } from "./Viewport3D";
 
 export interface BenchAction {
   label: string;
@@ -39,6 +41,26 @@ interface ControlColumnProps {
   onTogglePart: (id: string) => void;
   onValueChange: (id: string, value: string) => void;
   onHoverPart?: (label: string | null) => void;
+  /** Zero-based active board index (drives the lab instrument panel, 0-4). */
+  boardIndex: number;
+  /** Sketch state for the live D13 probe readout. */
+  running: boolean;
+  blink: boolean;
+  /** Sonar target distance in cm, lifted to App so Viewport3D can use it too. */
+  targetDistance: number;
+  onTargetDistance: (cm: number) => void;
+  /** Fig. 03 · lifted D9 pin state + toggle (energize logic lives in App). */
+  d9High: boolean;
+  onD9Toggle: (next: boolean) => void;
+  /** Fig. 03 · fire the HIGH→LOW flyback burnout check (logic lives in App). */
+  onTriggerBurnout: () => void;
+  /** 3D jumper-wire / current-flow overlay visibility. */
+  showWires: boolean;
+  onToggleWires: () => void;
+  /** Structured fault raised by an instrument interaction. */
+  onInstrumentFault: (fault: EduFault) => void;
+  /** Serial monitor line from an instrument interaction. */
+  onInstrumentLog: (line: string) => void;
 }
 
 export default function ControlColumn({
@@ -62,12 +84,41 @@ export default function ControlColumn({
   onTogglePart,
   onValueChange,
   onHoverPart,
+  boardIndex,
+  running,
+  blink,
+  targetDistance,
+  onTargetDistance,
+  d9High,
+  onD9Toggle,
+  onTriggerBurnout,
+  showWires,
+  onToggleWires,
+  onInstrumentFault,
+  onInstrumentLog,
 }: ControlColumnProps) {
   return (
     <div className="flex w-56 shrink-0 flex-col gap-2 overflow-y-auto border-r border-[#222] p-4">
       <h2 className="text-sm font-bold">
         Fig. {String(fig).padStart(2, "0")} — {title}
       </h2>
+
+      {/* Retro lab instrument module for the active board (0-4) */}
+      <LabInstrumentPanel
+        boardIndex={boardIndex}
+        parts={parts}
+        placed={placed}
+        values={values}
+        running={running}
+        blink={blink}
+        targetDistance={targetDistance}
+        onTargetDistance={onTargetDistance}
+        d9High={d9High}
+        onD9Toggle={onD9Toggle}
+        onTriggerBurnout={onTriggerBurnout}
+        onFault={onInstrumentFault}
+        onLog={onInstrumentLog}
+      />
 
       {/* Hybrid view toggle: procedural bench vs real CAD model */}
       <div className="flex rounded-full border border-[#222] bg-[#f3efe7] p-0.5 text-[10px] font-bold">
@@ -227,6 +278,16 @@ export default function ControlColumn({
         className={`w-16 rounded-full border border-[#222] px-3 py-1 text-xs ${labels ? "bg-[#222] text-[#EAE6DF]" : ""}`}
       >
         {labels ? "On" : "Off"}
+      </button>
+      <div className="mt-3 text-[10px] tracking-widest text-[#666]">
+        3D WIRES
+      </div>
+      <button
+        onClick={onToggleWires}
+        title="Show arched 3D jumper wires + directional current arrows"
+        className={`w-16 rounded-full border border-[#222] px-3 py-1 text-xs ${showWires ? "bg-[#222] text-[#EAE6DF]" : ""}`}
+      >
+        {showWires ? "On" : "Off"}
       </button>
       <div className="mt-auto pt-4 text-[10px] leading-snug text-[#666]">
         <Wrench size={11} className="inline" /> Drag to orbit · scroll to zoom ·

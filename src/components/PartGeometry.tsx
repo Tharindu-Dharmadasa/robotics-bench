@@ -5,6 +5,12 @@ import * as THREE from "three";
 
 import { PCB_T } from "../data/boards";
 import type { Part } from "../types/simulator";
+import {
+  Batch23PartGeo,
+  Batch23PcbBase,
+  isBatch23Kind,
+  isBatch23Style,
+} from "./Batch23Geometry";
 
 const dark = "#1a1a1a";
 const metal = "#c9c9c9";
@@ -39,9 +45,7 @@ function ServoHorn({ active }: { active: boolean }) {
   useFrame((state, dt) => {
     const g = ref.current;
     if (!g) return;
-    const target = active
-      ? Math.sin(state.clock.elapsedTime * 2.2) * 0.65
-      : 0;
+    const target = active ? Math.sin(state.clock.elapsedTime * 2.2) * 0.65 : 0;
     g.rotation.y += (target - g.rotation.y) * (1 - Math.exp(-dt * 6));
   });
   return (
@@ -77,8 +81,12 @@ function Ws2812Die({ active }: { active: boolean }) {
     const c = new THREE.Color().setHSL(hue.current, 0.95, 0.5);
     m.emissive.lerp(c, 1 - Math.exp(-dt * 8));
     const pulse = active ? 2.4 + Math.sin(Date.now() * 0.006) * 0.6 : 0;
-    m.emissiveIntensity += (pulse - m.emissiveIntensity) * (1 - Math.exp(-dt * 6));
-    if (light.current) light.current.intensity += ((active ? 1.1 : 0) - light.current.intensity) * (1 - Math.exp(-dt * 6));
+    m.emissiveIntensity +=
+      (pulse - m.emissiveIntensity) * (1 - Math.exp(-dt * 6));
+    if (light.current)
+      light.current.intensity +=
+        ((active ? 1.1 : 0) - light.current.intensity) *
+        (1 - Math.exp(-dt * 6));
   });
   return (
     <group position={[0, 0.095, 0]}>
@@ -91,7 +99,12 @@ function Ws2812Die({ active }: { active: boolean }) {
           emissiveIntensity={0}
         />
       </mesh>
-      <pointLight ref={light} position={[0, 0.2, 0]} distance={1.2} intensity={0} />
+      <pointLight
+        ref={light}
+        position={[0, 0.2, 0]}
+        distance={1.2}
+        intensity={0}
+      />
     </group>
   );
 }
@@ -104,7 +117,8 @@ function RelayArm({ active }: { active: boolean }) {
     const g = arm.current;
     if (!g) return;
     // snap: fast clack between rest and pulled-in
-    state.current += ((active ? 1 : 0) - state.current) * (1 - Math.exp(-dt * 26));
+    state.current +=
+      ((active ? 1 : 0) - state.current) * (1 - Math.exp(-dt * 26));
     g.rotation.x = 0.45 - state.current * 0.85;
   });
   return (
@@ -117,7 +131,11 @@ function RelayArm({ active }: { active: boolean }) {
       {/* armature pivot post */}
       <mesh position={[-0.18, -0.04, 0]}>
         <cylinderGeometry args={[0.03, 0.03, 0.1, 10]} />
-        <meshStandardMaterial color="#8f9498" metalness={0.85} roughness={0.35} />
+        <meshStandardMaterial
+          color="#8f9498"
+          metalness={0.85}
+          roughness={0.35}
+        />
       </mesh>
     </group>
   );
@@ -130,7 +148,8 @@ function RelayIndicator({ active }: { active: boolean }) {
     const m = mat.current;
     if (!m) return;
     const target = active ? 3 : 0.15;
-    m.emissiveIntensity += (target - m.emissiveIntensity) * (1 - Math.exp(-dt * 10));
+    m.emissiveIntensity +=
+      (target - m.emissiveIntensity) * (1 - Math.exp(-dt * 10));
   });
   return (
     <mesh position={[-0.3, 0.3, 0.41]}>
@@ -219,6 +238,9 @@ export function Geo({
   /** Output-energy factor 0..1 (e.g. 10kΩ resistor => dim LED). */
   energy?: number;
 }) {
+  if (isBatch23Kind(part.kind) && (part.kind !== "diode" || part.id.startsWith("diodes_"))) {
+    return <Batch23PartGeo part={part} lit={lit} energy={energy} />;
+  }
   switch (part.kind) {
     case "dip": {
       // leg count follows part.n (MAX232 = 16, LM324 = 14, ATmega = 28)
@@ -232,19 +254,34 @@ export function Geo({
           {/* stepped matte-charcoal epoxy body */}
           <mesh position={[0, 0.06, 0]} castShadow>
             <boxGeometry args={[bodyL, 0.12, 0.78]} />
-            <meshStandardMaterial color="#1c1c1c" roughness={0.45} metalness={0.05} />
+            <meshStandardMaterial
+              color="#1c1c1c"
+              roughness={0.45}
+              metalness={0.05}
+            />
           </mesh>
           <mesh position={[0, 0.2, 0]} castShadow>
             <boxGeometry args={[bodyL - 0.15, 0.2, 0.6]} />
-            <meshStandardMaterial color="#1c1c1c" roughness={0.42} metalness={0.05} />
+            <meshStandardMaterial
+              color="#1c1c1c"
+              roughness={0.42}
+              metalness={0.05}
+            />
           </mesh>
           {/* moulded index notch on the left end */}
-          <mesh position={[-bodyL / 2 + 0.05, 0.2, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <mesh
+            position={[-bodyL / 2 + 0.05, 0.2, 0]}
+            rotation={[0, 0, Math.PI / 2]}
+            castShadow
+          >
             <cylinderGeometry args={[0.11, 0.11, 0.05, 16]} />
             <meshStandardMaterial color="#080808" roughness={0.7} />
           </mesh>
           {/* white pin-1 dot */}
-          <mesh position={[-span / 2 + 0.08, 0.301, 0.17]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh
+            position={[-span / 2 + 0.08, 0.301, 0.17]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
             <circleGeometry args={[0.045, 16]} />
             <meshStandardMaterial color="#f5f5ee" />
           </mesh>
@@ -253,14 +290,22 @@ export function Geo({
             <group key={i}>
               <mesh position={[legX(i), 0.09, legZ(i) * 1.08]}>
                 <boxGeometry args={[0.05, 0.18, 0.04]} />
-                <meshStandardMaterial color={metal} metalness={0.85} roughness={0.28} />
+                <meshStandardMaterial
+                  color={metal}
+                  metalness={0.85}
+                  roughness={0.28}
+                />
               </mesh>
               <mesh
                 position={[legX(i), 0.015, legZ(i) * 0.94]}
                 rotation={[legZ(i) > 0 ? 0.5 : -0.5, 0, 0]}
               >
                 <boxGeometry args={[0.05, 0.04, 0.11]} />
-                <meshStandardMaterial color={metal} metalness={0.85} roughness={0.28} />
+                <meshStandardMaterial
+                  color={metal}
+                  metalness={0.85}
+                  roughness={0.28}
+                />
               </mesh>
             </group>
           ))}
@@ -273,11 +318,19 @@ export function Geo({
         <group>
           <mesh position={[0, 0.11, 0]} castShadow>
             <boxGeometry args={[0.75, 0.22, 0.9]} />
-            <meshStandardMaterial color="#b9bec2" metalness={0.92} roughness={0.3} />
+            <meshStandardMaterial
+              color="#b9bec2"
+              metalness={0.92}
+              roughness={0.3}
+            />
           </mesh>
           <mesh position={[0, 0.16, 0]}>
             <boxGeometry args={[0.77, 0.1, 0.92]} />
-            <meshStandardMaterial color="#8f9498" metalness={0.85} roughness={0.4} />
+            <meshStandardMaterial
+              color="#8f9498"
+              metalness={0.85}
+              roughness={0.4}
+            />
           </mesh>
           <mesh position={[0, 0.1, 0.46]}>
             <boxGeometry args={[0.6, 0.03, 0.02]} />
@@ -299,7 +352,11 @@ export function Geo({
           ].map(([x, z], i) => (
             <mesh key={i} position={[x, 0.045, z]}>
               <boxGeometry args={[0.06, 0.08, 0.4]} />
-              <meshStandardMaterial color={metal} metalness={0.85} roughness={0.3} />
+              <meshStandardMaterial
+                color={metal}
+                metalness={0.85}
+                roughness={0.3}
+              />
             </mesh>
           ))}
           {[
@@ -308,7 +365,11 @@ export function Geo({
           ].map(([x, z], i) => (
             <mesh key={i} position={[x, 0.045, z]}>
               <boxGeometry args={[0.4, 0.08, 0.06]} />
-              <meshStandardMaterial color={metal} metalness={0.85} roughness={0.3} />
+              <meshStandardMaterial
+                color={metal}
+                metalness={0.85}
+                roughness={0.3}
+              />
             </mesh>
           ))}
           <Ws2812Die active={lit} />
@@ -323,18 +384,28 @@ export function Geo({
             <group key={x}>
               <mesh position={[x, 0.07, 0]} castShadow>
                 <boxGeometry args={[0.2, 0.14, 0.2]} />
-                <meshStandardMaterial color={part.color ?? "#d64b3a"} roughness={0.55} />
+                <meshStandardMaterial
+                  color={part.color ?? "#d64b3a"}
+                  roughness={0.55}
+                />
               </mesh>
               <mesh position={[x, 0.02, 0]}>
                 <cylinderGeometry args={[0.018, 0.018, 0.1, 8]} />
-                <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+                <meshStandardMaterial
+                  color={metal}
+                  metalness={0.9}
+                  roughness={0.3}
+                />
               </mesh>
             </group>
           ))}
           {/* flexible lead: half-torus arc bowing upward between the caps */}
           <mesh position={[0, 0.07, 0]}>
             <torusGeometry args={[0.55, 0.026, 8, 32, Math.PI]} />
-            <meshStandardMaterial color={part.color ?? "#d64b3a"} roughness={0.6} />
+            <meshStandardMaterial
+              color={part.color ?? "#d64b3a"}
+              roughness={0.6}
+            />
           </mesh>
         </group>
       );
@@ -342,8 +413,14 @@ export function Geo({
       // 2N2222A TO-92: half-cylinder black cap, flat face, 3 leads
       return (
         <group>
-          <mesh position={[0, 0.15, 0]} rotation={[0, -Math.PI / 2, 0]} castShadow>
-            <cylinderGeometry args={[0.16, 0.16, 0.3, 20, 1, false, 0, Math.PI]} />
+          <mesh
+            position={[0, 0.15, 0]}
+            rotation={[0, -Math.PI / 2, 0]}
+            castShadow
+          >
+            <cylinderGeometry
+              args={[0.16, 0.16, 0.3, 20, 1, false, 0, Math.PI]}
+            />
             <meshStandardMaterial color="#141414" roughness={0.45} />
           </mesh>
           <mesh position={[0, 0.15, -0.075]} castShadow>
@@ -353,7 +430,11 @@ export function Geo({
           {[-0.07, 0, 0.07].map((x) => (
             <mesh key={x} position={[x, 0.05, 0]}>
               <cylinderGeometry args={[0.016, 0.016, 0.14, 8]} />
-              <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+              <meshStandardMaterial
+                color={metal}
+                metalness={0.9}
+                roughness={0.3}
+              />
             </mesh>
           ))}
         </group>
@@ -362,18 +443,34 @@ export function Geo({
       // 1N4007 axial: black epoxy cylinder with the silver cathode band
       return (
         <group>
-          <mesh position={[0, 0.12, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <mesh
+            position={[0, 0.12, 0]}
+            rotation={[0, 0, Math.PI / 2]}
+            castShadow
+          >
             <cylinderGeometry args={[0.1, 0.1, 0.34, 16]} />
             <meshStandardMaterial color="#181818" roughness={0.4} />
           </mesh>
           <mesh position={[0.13, 0.12, 0]} rotation={[0, 0, Math.PI / 2]}>
             <cylinderGeometry args={[0.102, 0.102, 0.045, 16]} />
-            <meshStandardMaterial color="#d9dde0" metalness={0.8} roughness={0.3} />
+            <meshStandardMaterial
+              color="#d9dde0"
+              metalness={0.8}
+              roughness={0.3}
+            />
           </mesh>
           {[-0.26, 0.26].map((x) => (
-            <mesh key={x} position={[x, 0.12, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <mesh
+              key={x}
+              position={[x, 0.12, 0]}
+              rotation={[0, 0, Math.PI / 2]}
+            >
               <cylinderGeometry args={[0.018, 0.018, 0.18, 8]} />
-              <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+              <meshStandardMaterial
+                color={metal}
+                metalness={0.9}
+                roughness={0.3}
+              />
             </mesh>
           ))}
         </group>
@@ -394,7 +491,11 @@ export function Geo({
           {[-0.35, -0.15, 0.05, 0.25, 0.4].map((x, i) => (
             <mesh key={i} position={[x, 0.0, i % 2 ? 0.28 : -0.28]}>
               <boxGeometry args={[0.07, 0.1, 0.07]} />
-              <meshStandardMaterial color={metal} metalness={0.85} roughness={0.3} />
+              <meshStandardMaterial
+                color={metal}
+                metalness={0.85}
+                roughness={0.3}
+              />
             </mesh>
           ))}
           {/* clicking contact armature + load indicator while the coil is driven */}
@@ -416,17 +517,29 @@ export function Geo({
             <group key={x}>
               <mesh position={[x, 0.26, 0]} castShadow>
                 <cylinderGeometry args={[0.09, 0.09, 0.08, 12]} />
-                <meshStandardMaterial color="#c9a227" metalness={0.9} roughness={0.35} />
+                <meshStandardMaterial
+                  color="#c9a227"
+                  metalness={0.9}
+                  roughness={0.35}
+                />
               </mesh>
               <mesh position={[x, 0.26, 0]} rotation={[0, 0, Math.PI / 2]}>
                 <boxGeometry args={[0.05, 0.02, 0.14]} />
-                <meshStandardMaterial color="#7a6215" metalness={0.7} roughness={0.4} />
+                <meshStandardMaterial
+                  color="#7a6215"
+                  metalness={0.7}
+                  roughness={0.4}
+                />
               </mesh>
             </group>
           ))}
           {/* wire entry holes on the side */}
           {[-0.2, 0.2].map((x) => (
-            <mesh key={x} position={[x, 0.1, 0.23]} rotation={[-Math.PI / 2, 0, 0]}>
+            <mesh
+              key={x}
+              position={[x, 0.1, 0.23]}
+              rotation={[-Math.PI / 2, 0, 0]}
+            >
               <circleGeometry args={[0.055, 12]} />
               <meshStandardMaterial color="#0c1a0f" />
             </mesh>
@@ -439,12 +552,20 @@ export function Geo({
         <group>
           <mesh position={[0, 0.32, 0]} castShadow>
             <cylinderGeometry args={[0.42, 0.42, 0.62, 24]} />
-            <meshStandardMaterial color="#b9bec2" metalness={0.92} roughness={0.28} />
+            <meshStandardMaterial
+              color="#b9bec2"
+              metalness={0.92}
+              roughness={0.28}
+            />
           </mesh>
           {/* silver mesh radiating face (top) */}
           <mesh position={[0, 0.635, 0]}>
             <cylinderGeometry args={[0.415, 0.415, 0.01, 24]} />
-            <meshStandardMaterial color="#d4d8db" metalness={0.95} roughness={0.55} />
+            <meshStandardMaterial
+              color="#d4d8db"
+              metalness={0.95}
+              roughness={0.55}
+            />
           </mesh>
           {/* mesh grid relief */}
           {[-0.2, 0, 0.2].map((o) => (
@@ -454,19 +575,35 @@ export function Geo({
               rotation={[0, 0, Math.PI / 2]}
             >
               <boxGeometry args={[0.83, 0.004, 0.02]} />
-              <meshStandardMaterial color="#8a9096" metalness={0.9} roughness={0.4} />
+              <meshStandardMaterial
+                color="#8a9096"
+                metalness={0.9}
+                roughness={0.4}
+              />
             </mesh>
           ))}
           {[-0.2, 0, 0.2].map((o) => (
-            <mesh key={`z${o}`} position={[o, 0.641, 0]} rotation={[0, Math.PI / 2, 0]}>
+            <mesh
+              key={`z${o}`}
+              position={[o, 0.641, 0]}
+              rotation={[0, Math.PI / 2, 0]}
+            >
               <boxGeometry args={[0.83, 0.004, 0.02]} />
-              <meshStandardMaterial color="#8a9096" metalness={0.9} roughness={0.4} />
+              <meshStandardMaterial
+                color="#8a9096"
+                metalness={0.9}
+                roughness={0.4}
+              />
             </mesh>
           ))}
           {/* rolled rim ring */}
           <mesh position={[0, 0.03, 0]}>
             <cylinderGeometry args={[0.44, 0.44, 0.06, 24]} />
-            <meshStandardMaterial color="#9fa4a8" metalness={0.9} roughness={0.35} />
+            <meshStandardMaterial
+              color="#9fa4a8"
+              metalness={0.9}
+              roughness={0.35}
+            />
           </mesh>
           {/* the T can emits the 40 kHz ping rings while the sketch runs */}
           {part.id === "tx1" && <SonarWave active={lit} />}
@@ -478,10 +615,17 @@ export function Geo({
           {/* matte charcoal epoxy body */}
           <mesh position={[0, 0.09, 0]} castShadow>
             <boxGeometry args={[0.56, 0.09, 0.56]} />
-            <meshStandardMaterial color="#1c1c1c" roughness={0.42} metalness={0.05} />
+            <meshStandardMaterial
+              color="#1c1c1c"
+              roughness={0.42}
+              metalness={0.05}
+            />
           </mesh>
           {/* white pin-1 dot */}
-          <mesh position={[-0.19, 0.136, -0.19]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh
+            position={[-0.19, 0.136, -0.19]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
             <circleGeometry args={[0.035, 12]} />
             <meshStandardMaterial color="#f5f5ee" />
           </mesh>
@@ -494,7 +638,11 @@ export function Geo({
                 position={[-0.21 + i * 0.06, 0.035, 0.31]}
               >
                 <boxGeometry args={[0.035, 0.02, 0.12]} />
-                <meshStandardMaterial color={metal} metalness={0.85} roughness={0.3} />
+                <meshStandardMaterial
+                  color={metal}
+                  metalness={0.85}
+                  roughness={0.3}
+                />
               </mesh>
             )),
           )}
@@ -560,7 +708,11 @@ export function Geo({
           {/* centre pin */}
           <mesh position={[-0.76, 0.45, 0]} rotation={[0, 0, Math.PI / 2]}>
             <cylinderGeometry args={[0.05, 0.05, 0.03, 12]} />
-            <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+            <meshStandardMaterial
+              color={metal}
+              metalness={0.9}
+              roughness={0.3}
+            />
           </mesh>
         </group>
       );
@@ -593,7 +745,11 @@ export function Geo({
           {[-0.18, 0.18].map((x) => (
             <mesh key={x} position={[x, 0.012, 0]}>
               <boxGeometry args={[0.12, 0.02, 0.22]} />
-              <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+              <meshStandardMaterial
+                color={metal}
+                metalness={0.9}
+                roughness={0.3}
+              />
             </mesh>
           ))}
         </group>
@@ -614,7 +770,11 @@ export function Geo({
           ].map(([x, z]) => (
             <mesh key={`${x}-${z}`} position={[x, 0.03, z]}>
               <boxGeometry args={[0.07, 0.06, 0.07]} />
-              <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+              <meshStandardMaterial
+                color={metal}
+                metalness={0.9}
+                roughness={0.3}
+              />
             </mesh>
           ))}
           {/* tin-plated actuator can */}
@@ -669,7 +829,11 @@ export function Geo({
           {[-0.072, 0.072].map((x) => (
             <mesh key={x} position={[x, 0.045, 0]}>
               <boxGeometry args={[0.028, 0.08, 0.1]} />
-              <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+              <meshStandardMaterial
+                color={metal}
+                metalness={0.9}
+                roughness={0.3}
+              />
             </mesh>
           ))}
         </group>
@@ -687,7 +851,11 @@ export function Geo({
             {[-0.085, 0.085].map((x) => (
               <mesh key={x} position={[x, 0.045, 0]}>
                 <boxGeometry args={[0.03, 0.08, 0.1]} />
-                <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+                <meshStandardMaterial
+                  color={metal}
+                  metalness={0.9}
+                  roughness={0.3}
+                />
               </mesh>
             ))}
             {[b1, b2, b3, BAND.gold].map((c, i) => (
@@ -706,7 +874,11 @@ export function Geo({
       // axial through-hole: beige body with 4 colour bands + wire leads
       return (
         <group>
-          <mesh position={[0, 0.14, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <mesh
+            position={[0, 0.14, 0]}
+            rotation={[0, 0, Math.PI / 2]}
+            castShadow
+          >
             <cylinderGeometry args={[0.075, 0.075, 0.32, 16]} />
             <meshStandardMaterial color="#d8c79f" roughness={0.5} />
           </mesh>
@@ -721,9 +893,17 @@ export function Geo({
             </mesh>
           ))}
           {[-0.27, 0.27].map((x) => (
-            <mesh key={x} position={[x, 0.14, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <mesh
+              key={x}
+              position={[x, 0.14, 0]}
+              rotation={[0, 0, Math.PI / 2]}
+            >
               <cylinderGeometry args={[0.018, 0.018, 0.2, 8]} />
-              <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+              <meshStandardMaterial
+                color={metal}
+                metalness={0.9}
+                roughness={0.3}
+              />
             </mesh>
           ))}
         </group>
@@ -744,9 +924,17 @@ export function Geo({
           </mesh>
           {/* tinned legs */}
           {[-0.22, 0.22].map((x) => (
-            <mesh key={x} position={[x, 0.04, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <mesh
+              key={x}
+              position={[x, 0.04, 0]}
+              rotation={[0, 0, Math.PI / 2]}
+            >
               <cylinderGeometry args={[0.02, 0.02, 0.12, 8]} />
-              <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+              <meshStandardMaterial
+                color={metal}
+                metalness={0.9}
+                roughness={0.3}
+              />
             </mesh>
           ))}
         </group>
@@ -762,13 +950,21 @@ export function Geo({
           {/* metal tab on the top face */}
           <mesh position={[0, 0.16, -0.04]} castShadow>
             <boxGeometry args={[0.42, 0.025, 0.28]} />
-            <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+            <meshStandardMaterial
+              color={metal}
+              metalness={0.9}
+              roughness={0.3}
+            />
           </mesh>
           {/* three legs on the front edge */}
           {[-0.14, 0, 0.14].map((x) => (
             <mesh key={x} position={[x, 0.035, 0.2]}>
               <boxGeometry args={[0.05, 0.07, 0.03]} />
-              <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+              <meshStandardMaterial
+                color={metal}
+                metalness={0.9}
+                roughness={0.3}
+              />
             </mesh>
           ))}
         </group>
@@ -789,7 +985,11 @@ export function Geo({
           {/* aluminium top cap */}
           <mesh position={[0, 0.605, 0]}>
             <cylinderGeometry args={[0.19, 0.19, 0.01, 24]} />
-            <meshStandardMaterial color={metal} metalness={0.9} roughness={0.25} />
+            <meshStandardMaterial
+              color={metal}
+              metalness={0.9}
+              roughness={0.25}
+            />
           </mesh>
           {/* scored vent cross */}
           <mesh position={[0, 0.611, 0]}>
@@ -849,7 +1049,11 @@ export function Geo({
             ].map(([x, h], i) => (
               <mesh key={i} position={[x, h / 2, 0]}>
                 <cylinderGeometry args={[0.016, 0.016, h, 8]} />
-                <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+                <meshStandardMaterial
+                  color={metal}
+                  metalness={0.9}
+                  roughness={0.3}
+                />
               </mesh>
             ))}
             {lit && (
@@ -874,7 +1078,11 @@ export function Geo({
           {[-0.065, 0.065].map((x) => (
             <mesh key={x} position={[x, 0.045, 0]}>
               <boxGeometry args={[0.035, 0.09, 0.11]} />
-              <meshStandardMaterial color={metal} metalness={0.9} roughness={0.3} />
+              <meshStandardMaterial
+                color={metal}
+                metalness={0.9}
+                roughness={0.3}
+              />
             </mesh>
           ))}
           {/* light-emitting lens */}
@@ -897,39 +1105,55 @@ export function Geo({
         </group>
       );
     case "esp32":
+      // ESP32-S3-WROOM-1: matte-black castellated carrier PCB, brushed-silver
+      // RF shield, and the exposed copper meander antenna on the edge-facing
+      // end, sitting inside the copper-free keep-out zone.
       return (
         <group>
+          {/* module PCB (matte black, 1.9 × 1.5 castellated carrier) */}
           <mesh position={[0, 0.04, 0]} castShadow receiveShadow>
-            <boxGeometry args={[1.9, 0.08, 1.05]} />
+            <boxGeometry args={[1.9, 0.08, 1.5]} />
             <meshStandardMaterial color="#151515" roughness={0.55} />
           </mesh>
-          <mesh position={[0, 0.15, 0.02]} castShadow>
-            <boxGeometry args={[1.15, 0.14, 0.72]} />
+          {/* brushed silver RF shield over the radio + flash die */}
+          <mesh position={[-0.28, 0.17, 0]} castShadow>
+            <boxGeometry args={[1.15, 0.18, 1.28]} />
             <meshStandardMaterial
-              color={metal}
-              metalness={0.9}
-              roughness={0.28}
+              color="#cfd3d8"
+              metalness={0.92}
+              roughness={0.24}
             />
           </mesh>
-          <mesh position={[0, 0.225, 0.02]}>
-            <boxGeometry args={[0.8, 0.01, 0.45]} />
+          {/* shield lid highlight (brushed sheen) */}
+          <mesh position={[-0.28, 0.262, 0]}>
+            <boxGeometry args={[0.85, 0.01, 0.9]} />
             <meshStandardMaterial
-              color="#b5b5b5"
+              color="#b8bcbf"
               metalness={0.9}
               roughness={0.35}
             />
           </mesh>
-          <mesh position={[0.84, 0.085, 0]}>
-            <boxGeometry args={[0.02, 0.006, 0.6]} />
+          {/* shield seam frame */}
+          <mesh position={[-0.28, 0.265, 0]}>
+            <boxGeometry args={[1.05, 0.006, 1.18]} />
+            <meshStandardMaterial
+              color="#8f9498"
+              metalness={0.85}
+              roughness={0.4}
+            />
+          </mesh>
+          {/* exposed copper meander antenna (copper-free section, edge end) */}
+          <mesh position={[0.88, 0.085, 0]}>
+            <boxGeometry args={[0.02, 0.006, 1.2]} />
             <meshStandardMaterial
               color="#d9b45a"
               metalness={1}
               roughness={0.2}
             />
           </mesh>
-          {[-0.21, -0.07, 0.07, 0.21].map((z) => (
-            <mesh key={z} position={[0.75, 0.085, z]}>
-              <boxGeometry args={[0.18, 0.006, 0.02]} />
+          {[-0.45, -0.15, 0.15, 0.45].map((z) => (
+            <mesh key={z} position={[0.78, 0.085, z]}>
+              <boxGeometry args={[0.2, 0.006, 0.02]} />
               <meshStandardMaterial
                 color="#d9b45a"
                 metalness={1}
@@ -937,7 +1161,19 @@ export function Geo({
               />
             </mesh>
           ))}
-          {[-0.44, 0.44].map((z) => (
+          {/* antenna feed from the shield edge into the meander */}
+          {[-0.55, 0.55].map((z) => (
+            <mesh key={z} position={[0.78, 0.085, z]}>
+              <boxGeometry args={[0.22, 0.006, 0.02]} />
+              <meshStandardMaterial
+                color="#d9b45a"
+                metalness={1}
+                roughness={0.2}
+              />
+            </mesh>
+          ))}
+          {/* castellated pads along both long edges (align to the headers) */}
+          {[-0.68, 0.68].map((z) => (
             <group key={z}>
               {Array.from({ length: 10 }).map((_, i) => (
                 <mesh key={i} position={[-0.81 + i * 0.18, 0.06, z]}>
@@ -951,14 +1187,6 @@ export function Geo({
               ))}
             </group>
           ))}
-          <mesh position={[-0.87, 0.1, 0]} castShadow>
-            <boxGeometry args={[0.16, 0.12, 0.28]} />
-            <meshStandardMaterial
-              color="#d6d6d6"
-              metalness={0.9}
-              roughness={0.25}
-            />
-          </mesh>
         </group>
       );
     case "ultrasonic":
@@ -1055,11 +1283,7 @@ export function Geo({
               />
             </mesh>
             {Array.from({ length: 5 }).map((_, i) => (
-              <mesh
-                key={i}
-                position={[0, 0.2, (i - 2) * 0.09]}
-                castShadow
-              >
+              <mesh key={i} position={[0, 0.2, (i - 2) * 0.09]} castShadow>
                 <boxGeometry args={[0.5, 0.36, 0.035]} />
                 <meshStandardMaterial
                   color="#1b1b1b"
@@ -1114,11 +1338,7 @@ export function Geo({
               />
             </mesh>
             {Array.from({ length: 5 }).map((_, i) => (
-              <mesh
-                key={i}
-                position={[(i - 2) * 0.075, 0.12, 0]}
-                castShadow
-              >
+              <mesh key={i} position={[(i - 2) * 0.075, 0.12, 0]} castShadow>
                 <boxGeometry args={[0.035, 0.24, 0.34]} />
                 <meshStandardMaterial
                   color={metal}
@@ -1287,15 +1507,27 @@ export function Geo({
           </group>
           <mesh position={[0, 0.45, 0]} castShadow>
             <cylinderGeometry args={[0.13, 0.13, 0.14, 20]} />
-            <meshStandardMaterial color="#a8adb1" metalness={0.9} roughness={0.3} />
+            <meshStandardMaterial
+              color="#a8adb1"
+              metalness={0.9}
+              roughness={0.3}
+            />
           </mesh>
           <mesh position={[0, 0.55, 0]} castShadow>
             <cylinderGeometry args={[0.075, 0.075, 0.26, 20]} />
-            <meshStandardMaterial color="#cfcfcf" metalness={0.95} roughness={0.2} />
+            <meshStandardMaterial
+              color="#cfcfcf"
+              metalness={0.95}
+              roughness={0.2}
+            />
           </mesh>
           <mesh position={[0.045, 0.57, 0]}>
             <boxGeometry args={[0.03, 0.2, 0.08]} />
-            <meshStandardMaterial color="#b8b8b8" metalness={0.95} roughness={0.2} />
+            <meshStandardMaterial
+              color="#b8b8b8"
+              metalness={0.95}
+              roughness={0.2}
+            />
           </mesh>
         </group>
       );
@@ -1335,7 +1567,11 @@ export function Geo({
                   rotation={[-Math.PI / 2, 0, 0]}
                 >
                   <planeGeometry args={[0.6, 0.012]} />
-                  <meshBasicMaterial color="#c9ffff" transparent opacity={0.55} />
+                  <meshBasicMaterial
+                    color="#c9ffff"
+                    transparent
+                    opacity={0.55}
+                  />
                 </mesh>
               ))}
             </>
@@ -1433,9 +1669,9 @@ export function AnimatedPart({
         g.traverse((o) => {
           const mesh = o as THREE.Mesh;
           if (!mesh.isMesh) return;
-          const m = (Array.isArray(mesh.material)
-            ? mesh.material[0]
-            : mesh.material) as THREE.MeshStandardMaterial | undefined;
+          const m = (
+            Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+          ) as THREE.MeshStandardMaterial | undefined;
           if (m && (m as THREE.MeshStandardMaterial).color) {
             mats.push({
               m,
@@ -1476,8 +1712,7 @@ export function AnimatedPart({
       });
       // ember glow decays over ~1.6s with a hot flicker, then dies out
       const ember =
-        Math.max(0, 2.2 * Math.exp(-t * 1.6)) *
-        (0.8 + Math.sin(t * 23) * 0.2);
+        Math.max(0, 2.2 * Math.exp(-t * 1.6)) * (0.8 + Math.sin(t * 23) * 0.2);
       captured.current.forEach(({ m }) => {
         m.emissiveIntensity = ember;
       });
@@ -1992,7 +2227,10 @@ const paintStyleSurface: Record<BoardStyleName, StylePainter> = {
     }
     // a few hand-soldered copper links between neighbouring pads
     const links: [number, number][] = [
-      [-1.1, 0.85], [0.15, -0.85], [-0.35, 1.35], [1.35, -0.35],
+      [-1.1, 0.85],
+      [0.15, -0.85],
+      [-0.35, 1.35],
+      [1.35, -0.35],
     ];
     ctx.strokeStyle = col("#b87333", 0.36, 0.9);
     ctx.lineWidth = 7;
@@ -2020,13 +2258,20 @@ const paintStyleSurface: Record<BoardStyleName, StylePainter> = {
       ctx.fillRect(rng() * U, rng() * H, 1.5, 1.5);
     }
     // faint ghost traces under the black mask
-    ctx.strokeStyle = col("#8a97a5", 0.42, 0.10);
+    ctx.strokeStyle = col("#8a97a5", 0.42, 0.1);
     ctx.lineWidth = 3;
     for (let i = 0; i < 22; i++) {
       const y = 90 + rng() * (H - 180);
       ctx.beginPath();
       ctx.moveTo(60 + rng() * 120, y);
-      ctx.bezierCurveTo(U * 0.35, y + 60 - rng() * 120, U * 0.6, y + 80 - rng() * 160, U - 60 - rng() * 120, y + 40 - rng() * 80);
+      ctx.bezierCurveTo(
+        U * 0.35,
+        y + 60 - rng() * 120,
+        U * 0.6,
+        y + 80 - rng() * 160,
+        U - 60 - rng() * 120,
+        y + 40 - rng() * 80,
+      );
       ctx.stroke();
     }
     // twin 22-pin castellated header pad rows along both long edges
@@ -2177,7 +2422,14 @@ function paintPcb(
     ctx.fillRect(rng() * U, rng() * H, 1.5, 1.5);
   }
   if (layer === "color") {
-    const g = ctx.createRadialGradient(U / 2, H / 2, U * 0.25, U / 2, H / 2, U * 0.75);
+    const g = ctx.createRadialGradient(
+      U / 2,
+      H / 2,
+      U * 0.25,
+      U / 2,
+      H / 2,
+      U * 0.75,
+    );
     g.addColorStop(0, "rgba(0,0,0,0)");
     g.addColorStop(1, "rgba(0,0,0,0.2)");
     ctx.fillStyle = g;
@@ -2211,7 +2463,7 @@ function paintPcb(
   /* ---- pin rows (positions first so traces can escape from them) ---- */
   // On the Uno the canvas-top row maps to the power/analog edge, so the
   // digital row paints along the opposite edge instead.
-  const isDigital = (l: string) => (/^D\d+$/i.test(l)) !== uno;
+  const isDigital = (l: string) => /^D\d+$/i.test(l) !== uno;
   let topLabels = labels.filter(isDigital);
   let botLabels = labels.filter((l) => !isDigital(l));
   if (!topLabels.length || !botLabels.length) {
@@ -2224,7 +2476,13 @@ function paintPcb(
   const PAD_I = 6;
   const topY = 62;
   const botY = H - 62;
-  type Pin = { x: number; y: number; label: string; top: boolean; pitch: number };
+  type Pin = {
+    x: number;
+    y: number;
+    label: string;
+    top: boolean;
+    pitch: number;
+  };
   const pins: Pin[] = [];
   const layRow = (items: string[], y: number, top: boolean) => {
     const pitch = (U - 2 * margin) / Math.max(items.length, 1);
@@ -2250,9 +2508,23 @@ function paintPcb(
     const sx = Math.sign(dx) || 1;
     const sy = Math.sign(dy) || 1;
     const m = Math.min(adx, ady);
-    if (diagFirst) return [[x0, y0], [x0 + sx * m, y0 + sy * m], [x1, y1]];
-    if (adx > ady) return [[x0, y0], [x1 - sx * m, y0], [x1, y1]];
-    return [[x0, y0], [x0, y1 - sy * m], [x1, y1]];
+    if (diagFirst)
+      return [
+        [x0, y0],
+        [x0 + sx * m, y0 + sy * m],
+        [x1, y1],
+      ];
+    if (adx > ady)
+      return [
+        [x0, y0],
+        [x1 - sx * m, y0],
+        [x1, y1],
+      ];
+    return [
+      [x0, y0],
+      [x0, y1 - sy * m],
+      [x1, y1],
+    ];
   };
   const strokeTrace = (pts: [number, number][], w: number) => {
     const path = () => {
@@ -2345,21 +2617,36 @@ function paintPcb(
 
   const holes: [number, number][] =
     size[0] > 5
-      ? ([[-2.9, 2.3], [3.1, 2.3], [3.1, -2.3], [-1.9, -2.3]] as [number, number][]).map(
-          ([x, z]): [number, number] => [X(x), Z(z)],
-        )
-      : ([[0.1, 0.14], [0.9, 0.14], [0.9, 0.86], [0.1, 0.86]] as [number, number][]).map(
-          ([a, b]): [number, number] => [a * U, b * H],
-        );
+      ? (
+          [
+            [-2.9, 2.3],
+            [3.1, 2.3],
+            [3.1, -2.3],
+            [-1.9, -2.3],
+          ] as [number, number][]
+        ).map(([x, z]): [number, number] => [X(x), Z(z)])
+      : (
+          [
+            [0.1, 0.14],
+            [0.9, 0.14],
+            [0.9, 0.86],
+            [0.1, 0.86],
+          ] as [number, number][]
+        ).map(([a, b]): [number, number] => [a * U, b * H]);
   holes.forEach(([x, y]) => pad(x, y, 30, 17));
 
   // ICSP 2x3 header pads
   const icsp = { x: U * 0.9, y: 215 };
   for (let r = 0; r < 3; r++)
-    for (let c = 0; c < 2; c++) pad(icsp.x + (c - 0.5) * 30, icsp.y + (r - 1) * 30, 9, 4);
+    for (let c = 0; c < 2; c++)
+      pad(icsp.x + (c - 0.5) * 30, icsp.y + (r - 1) * 30, 9, 4);
 
   // fiducials (bare copper dots with mask opening)
-  [[46, 46], [U - 46, 46], [U - 46, H - 46]].forEach(([x, y]) => {
+  [
+    [46, 46],
+    [U - 46, 46],
+    [U - 46, H - 46],
+  ].forEach(([x, y]) => {
     ctx.beginPath();
     ctx.arc(x, y, 14, 0, TAU);
     ctx.fillStyle = col("#000000", 0.5, 0.18);
@@ -2455,126 +2742,131 @@ function paintPcb(
     const CX = (f: number) => f * U;
     const CY = (f: number) => yMin + f * (yMax - yMin);
 
-  // U1 main IC (QFP outline with pin ticks and pin-1 dot)
-  {
-    const x = CX(0.5);
-    const y = CY(0.45);
-    const w = 210 * cs + 40;
-    const h = 150 * cs + 20;
-    box(x, y, w, h);
-    for (let i = 0; i < 12; i++) {
-      const tx = x - w / 2 + 14 + (i * (w - 28)) / 11;
-      tick(tx, y - h / 2, tx, y - h / 2 - 12);
-      tick(tx, y + h / 2, tx, y + h / 2 + 12);
+    // U1 main IC (QFP outline with pin ticks and pin-1 dot)
+    {
+      const x = CX(0.5);
+      const y = CY(0.45);
+      const w = 210 * cs + 40;
+      const h = 150 * cs + 20;
+      box(x, y, w, h);
+      for (let i = 0; i < 12; i++) {
+        const tx = x - w / 2 + 14 + (i * (w - 28)) / 11;
+        tick(tx, y - h / 2, tx, y - h / 2 - 12);
+        tick(tx, y + h / 2, tx, y + h / 2 + 12);
+      }
+      for (let i = 0; i < 8; i++) {
+        const ty = y - h / 2 + 12 + (i * (h - 24)) / 7;
+        tick(x - w / 2, ty, x - w / 2 - 12, ty);
+        tick(x + w / 2, ty, x + w / 2 + 12, ty);
+      }
+      dot(x - w / 2 + 18, y - h / 2 + 18);
+      text("U1", x, y, 32 * Math.max(cs, 0.8), { weight: "800" });
     }
-    for (let i = 0; i < 8; i++) {
-      const ty = y - h / 2 + 12 + (i * (h - 24)) / 7;
-      tick(x - w / 2, ty, x - w / 2 - 12, ty);
-      tick(x + w / 2, ty, x + w / 2 + 12, ty);
+    // U2 SOIC
+    {
+      const x = CX(0.22);
+      const y = CY(0.28);
+      const w = 110 * cs + 20;
+      const h = 80 * cs + 14;
+      box(x, y, w, h);
+      for (let i = 0; i < 4; i++) {
+        const tx = x - w / 2 + 14 + (i * (w - 28)) / 3;
+        tick(tx, y - h / 2, tx, y - h / 2 - 9);
+        tick(tx, y + h / 2, tx, y + h / 2 + 9);
+      }
+      dot(x - w / 2 + 12, y - h / 2 + 12, 4);
+      text("U2", x, y, 24, { weight: "800" });
     }
-    dot(x - w / 2 + 18, y - h / 2 + 18);
-    text("U1", x, y, 32 * Math.max(cs, 0.8), { weight: "800" });
-  }
-  // U2 SOIC
-  {
-    const x = CX(0.22);
-    const y = CY(0.28);
-    const w = 110 * cs + 20;
-    const h = 80 * cs + 14;
-    box(x, y, w, h);
-    for (let i = 0; i < 4; i++) {
-      const tx = x - w / 2 + 14 + (i * (w - 28)) / 3;
-      tick(tx, y - h / 2, tx, y - h / 2 - 9);
-      tick(tx, y + h / 2, tx, y + h / 2 + 9);
+    // Y1 crystal
+    {
+      const x = CX(0.74);
+      const y = CY(0.2);
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 52, 24 * Math.max(cs, 0.8), 0, 0, TAU);
+      ctx.stroke();
+      text("Y1", x, y, 22, { weight: "800" });
     }
-    dot(x - w / 2 + 12, y - h / 2 + 12, 4);
-    text("U2", x, y, 24, { weight: "800" });
-  }
-  // Y1 crystal
-  {
-    const x = CX(0.74);
-    const y = CY(0.2);
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.ellipse(x, y, 52, 24 * Math.max(cs, 0.8), 0, 0, TAU);
-    ctx.stroke();
-    text("Y1", x, y, 22, { weight: "800" });
-  }
-  // C1 / C2
-  [
-    { f: 0.64, l: "C1", pol: true },
-    { f: 0.74, l: "C2", pol: false },
-  ].forEach(({ f, l, pol }) => {
-    const x = CX(f);
-    const y = CY(0.62);
-    box(x, y, 50, 28 * Math.max(cs, 0.8));
-    if (pol) text("+", x - 36, y, 22, { weight: "800" });
-    text(l, x, y + 30, 20);
-  });
-  // R1..R3
-  [0.3, 0.4, 0.5].forEach((f, i) => {
-    const x = CX(f);
-    const y = CY(0.8);
-    box(x, y, 54, 24 * Math.max(cs, 0.8));
-    text(`R${i + 1}`, x, y + 28, 20);
-  });
-  // LED1 (diode symbol)
-  {
-    const x = CX(0.62);
-    const y = CY(0.84);
-    box(x, y, 54, 24 * Math.max(cs, 0.8));
-    tick(x + 12, y - 12, x + 12, y + 12);
-    text("LED1", x, y + 28, 20);
-  }
-  // J1 USB connector outline
-  {
-    const x = CX(0.075);
-    const y = CY(0.38);
-    box(x, y, 120, 170 * cs + 30);
-    text("J1", x, y - 8, 28, { weight: "800" });
-    text("USB", x, y + 22, 20);
-  }
-  // J2 DC jack outline
-  {
-    const x = CX(0.08);
-    const y = CY(0.88);
-    box(x, y, 120, 100 * cs + 30);
-    text("J2", x, y - 8, 26, { weight: "800" });
-    text("DC IN", x, y + 20, 18);
-  }
-  // SW1 reset button
-  {
-    const x = CX(0.9);
-    const y = CY(0.66);
-    box(x, y, 62, 62);
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(x, y, 16, 0, TAU);
-    ctx.stroke();
-    text("SW1", x, y + 48, 20);
-    text("RST", x, y + 68, 16);
-  }
-  // ICSP outline
-  box(icsp.x, icsp.y, 84, 118);
-  dot(icsp.x - 15, icsp.y - 52, 4);
-  text("ICSP", icsp.x, icsp.y + 76, 18, { weight: "700" });
+    // C1 / C2
+    [
+      { f: 0.64, l: "C1", pol: true },
+      { f: 0.74, l: "C2", pol: false },
+    ].forEach(({ f, l, pol }) => {
+      const x = CX(f);
+      const y = CY(0.62);
+      box(x, y, 50, 28 * Math.max(cs, 0.8));
+      if (pol) text("+", x - 36, y, 22, { weight: "800" });
+      text(l, x, y + 30, 20);
+    });
+    // R1..R3
+    [0.3, 0.4, 0.5].forEach((f, i) => {
+      const x = CX(f);
+      const y = CY(0.8);
+      box(x, y, 54, 24 * Math.max(cs, 0.8));
+      text(`R${i + 1}`, x, y + 28, 20);
+    });
+    // LED1 (diode symbol)
+    {
+      const x = CX(0.62);
+      const y = CY(0.84);
+      box(x, y, 54, 24 * Math.max(cs, 0.8));
+      tick(x + 12, y - 12, x + 12, y + 12);
+      text("LED1", x, y + 28, 20);
+    }
+    // J1 USB connector outline
+    {
+      const x = CX(0.075);
+      const y = CY(0.38);
+      box(x, y, 120, 170 * cs + 30);
+      text("J1", x, y - 8, 28, { weight: "800" });
+      text("USB", x, y + 22, 20);
+    }
+    // J2 DC jack outline
+    {
+      const x = CX(0.08);
+      const y = CY(0.88);
+      box(x, y, 120, 100 * cs + 30);
+      text("J2", x, y - 8, 26, { weight: "800" });
+      text("DC IN", x, y + 20, 18);
+    }
+    // SW1 reset button
+    {
+      const x = CX(0.9);
+      const y = CY(0.66);
+      box(x, y, 62, 62);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x, y, 16, 0, TAU);
+      ctx.stroke();
+      text("SW1", x, y + 48, 20);
+      text("RST", x, y + 68, 16);
+    }
+    // ICSP outline
+    box(icsp.x, icsp.y, 84, 118);
+    dot(icsp.x - 15, icsp.y - 52, 4);
+    text("ICSP", icsp.x, icsp.y + 76, 18, { weight: "700" });
 
-  // board title, revision and compliance marks
-  {
-    let tpx = 46;
-    setFont(tpx, "800");
-    const upper = title.toUpperCase();
-    while (ctx.measureText(upper).width > U * 0.62 && tpx > 20) {
-      tpx -= 2;
+    // board title, revision and compliance marks
+    {
+      let tpx = 46;
       setFont(tpx, "800");
+      const upper = title.toUpperCase();
+      while (ctx.measureText(upper).width > U * 0.62 && tpx > 20) {
+        tpx -= 2;
+        setFont(tpx, "800");
+      }
+      const ty = H - 250;
+      text(upper, U / 2, ty, tpx, { weight: "800" });
+      ctx.fillRect(U * 0.2, ty + tpx * 0.72, U * 0.6, 3);
+      text(
+        "ROBOTICS BENCH  \u00B7  REV A  \u00B7  2026",
+        U / 2,
+        ty + tpx * 1.35,
+        20,
+      );
+      text("CE", U * 0.86, H - 200, 26, { weight: "800" });
+      text("RoHS", U * 0.86, H - 170, 17, { weight: "700" });
     }
-    const ty = H - 250;
-    text(upper, U / 2, ty, tpx, { weight: "800" });
-    ctx.fillRect(U * 0.2, ty + tpx * 0.72, U * 0.6, 3);
-    text("ROBOTICS BENCH  \u00B7  REV A  \u00B7  2026", U / 2, ty + tpx * 1.35, 20);
-    text("CE", U * 0.86, H - 200, 26, { weight: "800" });
-    text("RoHS", U * 0.86, H - 170, 17, { weight: "700" });
-  }
   }
 
   ctx.restore();
@@ -2722,29 +3014,89 @@ function TiePoints() {
  */
 const FLOW_PATHS: Record<BoardStyleName, [number, number][][]> = {
   breadboard: [
-    [[-2.2, 1.61], [2.2, 1.61]],                                  // red rail
-    [[2.2, -1.61], [-2.2, -1.61]],                                // blue rail
-    [[-2.2, 1.61], [-1.55, 1.61], [-1.55, 0.85], [-0.35, 0.35], [0.55, 0.35]], // feed → R1 → LED
-    [[0.55, 0.35], [0.55, -0.85], [-1.55, -0.85], [-1.55, -1.61], [-2.2, -1.61]], // return
+    [
+      [-2.2, 1.61],
+      [2.2, 1.61],
+    ], // red rail
+    [
+      [2.2, -1.61],
+      [-2.2, -1.61],
+    ], // blue rail
+    [
+      [-2.2, 1.61],
+      [-1.55, 1.61],
+      [-1.55, 0.85],
+      [-0.35, 0.35],
+      [0.55, 0.35],
+    ], // feed → R1 → LED
+    [
+      [0.55, 0.35],
+      [0.55, -0.85],
+      [-1.55, -0.85],
+      [-1.55, -1.61],
+      [-2.2, -1.61],
+    ], // return
   ],
   perfboard: [
-    [[-2.05, -1.25], [0, -0.3], [1.9, 0.75]],                     // 12 V through the relay coil
-    [[-0.9, 0.35], [0.45, 1.1]],                                  // base drive Q1 → R-B
-    [[0.45, 0.2], [-0.9, 0.35]],                                  // pull-down R-D → Q1
-    [[1.5, -0.55], [1.9, 0.75]],                                  // flyback loop D1 → coil
+    [
+      [-2.05, -1.25],
+      [0, -0.3],
+      [1.9, 0.75],
+    ], // 12 V through the relay coil
+    [
+      [-0.9, 0.35],
+      [0.45, 1.1],
+    ], // base drive Q1 → R-B
+    [
+      [0.45, 0.2],
+      [-0.9, 0.35],
+    ], // pull-down R-D → Q1
+    [
+      [1.5, -0.55],
+      [1.9, 0.75],
+    ], // flyback loop D1 → coil
   ],
   "devkit-narrow": [
-    [[-2.75, 0.3], [-1.55, 0], [0.55, 0.15]],                     // COM USB → CP2102N → WROOM-1
-    [[-2.75, -0.3], [-1.55, 0]],                                  // OTG USB
-    [[-0.75, 0.85], [0.55, 0.15]],                                // AMS1117 3V3 rail
-    [[0.55, 0.15], [0.75, -0.85]],                                // WROOM-1 → WS2812
-    [[0.55, 0.15], [2.55, 0.55]],                                 // WROOM-1 → decoupling tank
+    [
+      [-2.75, 0.3],
+      [-1.55, 0],
+      [0.55, 0.15],
+    ], // COM USB → CP2102N → WROOM-1
+    [
+      [-2.75, -0.3],
+      [-1.55, 0],
+    ], // OTG USB
+    [
+      [-0.75, 0.85],
+      [0.55, 0.15],
+    ], // AMS1117 3V3 rail
+    [
+      [0.55, 0.15],
+      [0.75, -0.85],
+    ], // WROOM-1 → WS2812
+    [
+      [0.55, 0.15],
+      [2.55, 0.55],
+    ], // WROOM-1 → decoupling tank
   ],
   "hc-sr04": [
-    [[-1.95, 0], [-0.9, 0.5], [1.7, 0.85]],                       // header → MAX232 → T can
-    [[1.7, -0.85], [-0.9, -0.55]],                                // R can → LM324
-    [[-0.9, -0.55], [-0.9, 0.5]],                                 // LM324 → MAX232
-    [[0.55, 0.05], [-0.9, 0.5]],                                  // crystal timebase
+    [
+      [-1.95, 0],
+      [-0.9, 0.5],
+      [1.7, 0.85],
+    ], // header → MAX232 → T can
+    [
+      [1.7, -0.85],
+      [-0.9, -0.55],
+    ], // R can → LM324
+    [
+      [-0.9, -0.55],
+      [-0.9, 0.5],
+    ], // LM324 → MAX232
+    [
+      [0.55, 0.05],
+      [-0.9, 0.5],
+    ], // crystal timebase
   ],
 };
 
@@ -2759,7 +3111,10 @@ export function CurrentFlow({ style }: { style: BoardStyleName }) {
         const seg: number[] = [];
         let total = 0;
         for (let i = 1; i < pts.length; i++) {
-          const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+          const l = Math.hypot(
+            pts[i][0] - pts[i - 1][0],
+            pts[i][1] - pts[i - 1][1],
+          );
           seg.push(l);
           total += l;
         }
@@ -2774,7 +3129,11 @@ export function CurrentFlow({ style }: { style: BoardStyleName }) {
       const pi = Math.floor(i / PULSES_PER_PATH);
       const path = paths[pi];
       const { seg, total } = lengths[pi];
-      const d = (((t * (0.5 + (pi % 3) * 0.14)) + (i % PULSES_PER_PATH) / PULSES_PER_PATH) % 1) * total;
+      const d =
+        ((t * (0.5 + (pi % 3) * 0.14) +
+          (i % PULSES_PER_PATH) / PULSES_PER_PATH) %
+          1) *
+        total;
       let acc = 0;
       let x = path[0][0];
       let z = path[0][1];
@@ -2823,14 +3182,15 @@ export function Pcb({
   boardName?: string;
   pinLabels?: string[];
 }) {
+  if (!generic && isBatch23Style(boardName)) {
+    return (
+      <Batch23PcbBase boardName={boardName} explode={explode} />
+    );
+  }
   const ref = useRef<THREE.Group>(null);
   const boxRef = useRef<THREE.Mesh>(null);
   const style = !generic && !!boardName ? boardStyleOf(boardName) : null;
-  const [w, d] = generic
-    ? [4, 2.6]
-    : style
-      ? STYLE_DIMS[style]
-      : [6.9, 5.3];
+  const [w, d] = generic ? [4, 2.6] : style ? STYLE_DIMS[style] : [6.9, 5.3];
   // styled boards force their authentic base colour (breadboard plastic,
   // black devkit mask, HC-SR04 blue); the Uno keeps the bench colour picker
   const maskColor = style ? STYLE_MASK[style] : color;

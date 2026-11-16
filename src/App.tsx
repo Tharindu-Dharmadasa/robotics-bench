@@ -98,6 +98,12 @@ export default function App() {
   const [blink, setBlink] = useState(false);
   const [flick, setFlick] = useState(false);
   const [explode, setExplode] = useState(0);
+  /** Sonar target distance (cm) from the lab instrument panel, shared with the 3D reflector. */
+  const [targetDistance, setTargetDistance] = useState(30);
+  /** Fig. 03 · lifted D9 pin state (true = 5 V base drive, relay closed). */
+  const [d9High, setD9High] = useState(false);
+  /** 3D jumper-wire + current-flow overlay toggle (ControlColumn switch). */
+  const [showWires, setShowWires] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
   // live mirror of `values` for the telemetry interval (no timer restarts)
   const valuesRef = useRef(values);
@@ -138,6 +144,7 @@ export default function App() {
     setBlink(false);
     setFlick(false);
     setHover(null);
+    setD9High(false);
     setValues(initialValues(spec));
     setLogs([
       `> Fig. ${String(index + 1).padStart(2, "0")} — ${spec.name} loaded. Place the remaining parts.`,
@@ -275,6 +282,86 @@ export default function App() {
       log(
         `> Power the assembled board to see what ${opt} does to this circuit.`,
       );
+  };
+
+  /** Structured fault raised from the lab instrument panel (2D controls). */
+  const raiseInstrumentFault = (f: EduFault) => {
+    // degraded (e.g. the brownout warning) keeps the sketch running, like raiseEffect
+    if (f.severity !== "degraded") {
+      setRunning(false);
+      setBlink(false);
+    }
+    setFault(f);
+    log(`! ERROR: ${f.message}`);
+  };
+
+  /* ---------- Fig. 03 · lifted D9 base drive ---------- */
+
+  /** Parts the 2N2222 control/load loops need for the relay to actually pull in. */
+  const FIG3_LOOP_PARTS = ["q1", "rb", "k1"];
+  /** True when D9 HIGH really energises the coil: USB/power in, loop complete. */
+  const d9Energized =
+    activeBoard.id === 3 &&
+    d9High &&
+    usb &&
+    FIG3_LOOP_PARTS.every((id) => placed.has(id)) &&
+    (!fault || fault.severity === "degraded");
+
+  useEffect(() => {
+    if (d9Energized)
+      log("> D9 HIGH: 2N2222 base energised — 5V relay K1 armature pulled in.");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d9Energized]);
+
+  /**
+   * D9 toggle from the SG-03 base-drive instrument. HIGH immediately drives
+   * the 2N2222 base (relay closes even before Power on / Run). The HIGH→LOW
+   * flyback check is a separate lifted callback (d9TriggerBurnout) so the
+   * instrument can fire it explicitly on the falling edge.
+   */
+  const d9Toggle = (next: boolean) => {
+    if (next === d9High) return;
+    setD9High(next);
+    log(
+      next
+        ? "> D9 → HIGH · base drive 5V (2N2222 saturating)"
+        : "> D9 → LOW · base drive 0V",
+    );
+  };
+
+  /**
+   * Flyback watchdog, fired by the instrument when D9 snaps from HIGH to LOW:
+   * scan the placed parts on Fig. 03 case-insensitively for a diode / 1N4007.
+   * If none is placed while the coil was actually carrying current (USB in,
+   * control + load loop complete, no active fault), the 2N2222 dies from the
+   * inductive back-EMF spike immediately.
+   */
+  const d9TriggerBurnout = () => {
+    if (activeBoard.id !== 3) return;
+
+    const diodePlaced = parts.some(
+      (p) =>
+        placed.has(p.id) &&
+        (/diode|1n4007/i.test(p.id) || /diode|1n4007/i.test(p.name)),
+    );
+    // the coil only spikes if it was actually carrying current
+    const coilWasLive =
+      usb &&
+      FIG3_LOOP_PARTS.every((id) => placed.has(id)) &&
+      (!fault || fault.severity === "degraded");
+    if (diodePlaced || !coilWasLive) return;
+
+    const q = parts.find((p) => p.kind === "to92");
+    const msg =
+      "BURNOUT: 1N4007 Flyback Diode missing — >65V coil spike destroyed 2N2222!";
+    setFault({
+      partId: q?.id ?? "q1",
+      partName: q?.name ?? "2N2222",
+      severity: "burnout",
+      message: msg,
+      burnPartId: q?.id,
+    });
+    log(`! ${msg}`);
   };
 
   /** Quick-fix from the HUD fault banner (and the Repair bench action). */
@@ -479,8 +566,9 @@ export default function App() {
     switch (activeBoard.id) {
       case 2: // Fig. 02: the 5 mm LED blinks with the sketch cycle
         return id === "led2" && running ? blink : false;
-      case 3: // Fig. 03: relay armature clacks with D9
-        return id === "k1" && running ? blink : false;
+      case 3: // Fig. 03: relay armature clacks with the sketch cycle — or
+        // immediately when D9 is driven HIGH before Power on / Run
+        return id === "k1" ? (running ? blink : false) || d9Energized : false;
       case 4: // Fig. 04: PWR LED steady, WS2812 cycles hues while running
         if (id === "ledpwr") return true;
         return id === "rgb" && running;
@@ -523,6 +611,18 @@ export default function App() {
             onTogglePart={togglePart}
             onValueChange={changeValue}
             onHoverPart={setHover}
+            boardIndex={board}
+            running={running}
+            blink={blink}
+            targetDistance={targetDistance}
+            onTargetDistance={setTargetDistance}
+            d9High={d9High}
+            onD9Toggle={d9Toggle}
+            onTriggerBurnout={d9TriggerBurnout}
+            showWires={showWires}
+            onToggleWires={() => setShowWires((w) => !w)}
+            onInstrumentFault={raiseInstrumentFault}
+            onInstrumentLog={log}
           />
 
           <Viewport3D
@@ -538,9 +638,12 @@ export default function App() {
             total={total}
             status={status}
             running={running}
+            blink={blink}
             values={values}
             eduFault={fault}
             viewMode={viewMode}
+            showWires={showWires}
+            d9Energized={d9Energized}
             onRemovePart={togglePart}
             onRepair={repairFault}
             hover={hover}
@@ -548,6 +651,7 @@ export default function App() {
             onGlbFallback={() =>
               log("> No usable .glb model — procedural scene engaged.")
             }
+            targetDistance={targetDistance}
           />
         </div>
 

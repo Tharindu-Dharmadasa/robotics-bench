@@ -1,0 +1,419 @@
+import { useEffect, useRef, useState, type ReactNode } from "react";
+
+import type { EduFault } from "./Viewport3D";
+import type { Part } from "../types/simulator";
+
+/**
+ * LabInstrumentPanel — retro-hardware instrument rack bolted under the bench
+ * title. One module per lab (board indices 0–4); renders nothing otherwise.
+ * Every interaction stays 2D DOM (AGENTS.md rule 1: never <Html>/<Text> inside
+ * <Canvas>) and feeds structured faults / serial lines back to the bench
+ * through the onFault / onLog callbacks.
+ */
+export interface LabInstrumentPanelProps {
+  /** Zero-based active board index (0–4). */
+  boardIndex: number;
+  parts: Part[];
+  placed: Set<string>;
+  /** Configured part values, e.g. the resistor's "220Ω". */
+  values: Record<string, string>;
+  /** Is the board's sketch running? (drives the live D13 probe) */
+  running: boolean;
+  /** Blink phase of the running sketch (D13 HIGH half-cycle). */
+  blink: boolean;
+  /** Sonar target distance in cm (5–200), lifted to App for the 3D reflector. */
+  targetDistance: number;
+  onTargetDistance: (cm: number) => void;
+  /** Fig. 03 · lifted D9 state (true = pin driven HIGH, 5 V base drive). */
+  d9High?: boolean;
+  /** Fig. 03 · request a D9 toggle; energize logic lives in App. */
+  onD9Toggle?: (next: boolean) => void;
+  /** Fig. 03 · fire the flyback watchdog on the D9 HIGH→LOW edge (App logic). */
+  onTriggerBurnout?: () => void;
+  /** Raise a structured fault (HUD banner + repair flow). */
+  onFault: (fault: EduFault) => void;
+  /** Append a line to the serial monitor. */
+  onLog: (line: string) => void;
+}
+
+/* ---------- shared retro hardware chrome ---------- */
+
+/** Dark instrument bezel with corner screws and a silkscreened module tag. */
+function Module({ tag, title, children }: { tag: string; title: string; children: ReactNode }) {
+  return (
+    <div className="relative rounded-lg border-2 border-[#222] bg-[#1e1b17] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+      {["left-1 top-1", "right-1 top-1", "left-1 bottom-1", "right-1 bottom-1"].map((pos) => (
+        <span
+          key={pos}
+          className={`absolute ${pos} h-1 w-1 rounded-full bg-[#4a453c] shadow-inner`}
+        />
+      ))}
+      <div className="mb-1.5 flex items-center justify-between px-1">
+        <span className="text-[8px] font-bold tracking-widest text-[#c8b26a]">{tag}</span>
+        <span className="text-[8px] tracking-widest text-[#8a8378]">{title}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Amber-on-black LCD strip with faint scanlines; warn = red alarm palette. */
+function Lcd({ children, warn = false }: { children: ReactNode; warn?: boolean }) {
+  return (
+    <div
+      className={`rounded-sm border border-[#3a352c] bg-[#0d120c] px-2 py-1.5 font-mono text-[10px] leading-snug shadow-[inset_0_0_6px_rgba(0,0,0,0.8)] ${
+        warn ? "text-[#ff7a5c]" : "text-[#9fe870]"
+      }`}
+      style={{
+        backgroundImage:
+          "repeating-linear-gradient(0deg, rgba(0,0,0,0.28) 0px, rgba(0,0,0,0.28) 1px, transparent 1px, transparent 3px)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Readout({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="text-[8px] tracking-widest text-[#8a8378]">{label}</span>
+      <span className={`font-mono text-[11px] font-bold ${warn ? "text-[#ff7a5c]" : ""}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/** Chunky hardware button; active = latched (amber), danger = red accent. */
+function HwButton({
+  onClick,
+  children,
+  active = false,
+  danger = false,
+  disabled = false,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+  active?: boolean;
+  danger?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded border border-[#222] px-2 py-1 text-[9px] font-bold uppercase tracking-wider transition active:translate-y-px ${
+        disabled
+          ? "cursor-not-allowed bg-[#3a352c] text-[#8a8378]"
+          : danger
+            ? "bg-[#f3efe7] text-red-800 hover:bg-red-800 hover:text-[#EAE6DF]"
+            : active
+              ? "bg-[#c8b26a] text-[#181410]"
+              : "bg-[#f3efe7] text-[#222] hover:bg-[#222] hover:text-[#EAE6DF]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* ---------- value helpers ---------- */
+
+/** "220Ω" → 220, "1kΩ" → 1000, "4.7k" → 4700. */
+const parseOhms = (raw: string): number | null => {
+  const m = raw.match(/([\d.]+)/);
+  if (!m) return null;
+  const n = parseFloat(m[1]);
+  if (!Number.isFinite(n)) return null;
+  return /k/i.test(raw) ? n * 1000 : n;
+};
+
+const fmtOhms = (o: number) => (o >= 1000 ? `${o / 1000}kΩ` : `${o}Ω`);
+
+/* ---------- Fig. 01 · Arduino Uno — live D13 logic probe + reset pulse ---------- */
+
+function D13Probe({
+  running,
+  blink,
+  onLog,
+}: Pick<LabInstrumentPanelProps, "running" | "blink" | "onLog">) {
+  const [pulse, setPulse] = useState(false);
+  const timer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) window.clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const resetPulse = () => {
+    if (timer.current) return; // momentary — one pulse at a time
+    setPulse(true);
+    onLog("> RST pulled LOW — bootloader handshake…");
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      setPulse(false);
+      onLog(
+        running
+          ? "> Reset released — sketch restarted from vector 0x0000."
+          : "> Reset released — board idle (no sketch running).",
+      );
+    }, 600);
+  };
+
+  const high = !pulse && running && blink;
+  return (
+    <>
+      <Lcd>
+        <div className="flex items-baseline justify-between">
+          <span>D13 PIN · {pulse ? "RST LOW" : high ? "HIGH" : "LOW"}</span>
+          <span className="text-[11px] font-bold">{pulse || !high ? "0.0 V" : "5.0 V"}</span>
+        </div>
+      </Lcd>
+      <div className="mt-1.5 flex items-center gap-2">
+        <HwButton onClick={resetPulse}>Reset Pulse</HwButton>
+        <span
+          title="D13 level LED"
+          className={`ml-auto h-2 w-2 rounded-full ${
+            high ? "bg-[#39d353] shadow-[0_0_6px_#39d353]" : "bg-[#5c1712]"
+          }`}
+        />
+      </div>
+    </>
+  );
+}
+
+/* ---------- Fig. 02 · LED + resistor — live Ohm's-law meter ---------- */
+
+const LED_VF = 2.0; // red LED forward voltage assumed by the bench's I model
+
+function OhmMeter({
+  parts,
+  placed,
+  values,
+}: Pick<LabInstrumentPanelProps, "parts" | "placed" | "values">) {
+  const res = parts.find((p) => p.kind === "res");
+  const inPlace = !!res && placed.has(res.id);
+  const ohms = res ? parseOhms(values[res.id] ?? res.value ?? "") : null;
+  const iMa = inPlace && ohms ? ((5.0 - LED_VF) / ohms) * 1000 : 0;
+  const over = inPlace && iMa > 20;
+
+  return (
+    <>
+      <Lcd warn={over}>
+        <Readout label="V SUPPLY" value="5.0 V" />
+        <Readout label="R LOAD" value={inPlace && ohms ? fmtOhms(ohms) : "OPEN"} />
+        <Readout
+          label="I LED"
+          value={
+            inPlace && ohms
+              ? `${iMa.toFixed(1)} mA${over ? "  !! OVER" : ""}`
+              : "0.0 mA"
+          }
+          warn={over}
+        />
+      </Lcd>
+      <div className="mt-1 text-[8px] tracking-widest text-[#8a8378]">
+        I = (5.0 − Vf 2.0) / R · LIMIT 20 mA
+      </div>
+    </>
+  );
+}
+
+/* ---------- Fig. 03 · transistor switch — D9 base drive + flyback watchdog ---------- */
+
+function BaseDrive({
+  parts,
+  placed,
+  d9High = false,
+  onD9Toggle,
+  onTriggerBurnout,
+}: Pick<
+  LabInstrumentPanelProps,
+  "parts" | "placed" | "d9High" | "onD9Toggle" | "onTriggerBurnout"
+>) {
+  // flyback protection: any placed part matching "diode" / "1N4007" (id or name)
+  const diode = parts.find(
+    (p) => /diode|1n4007/i.test(p.id) || /diode|1n4007/i.test(p.name),
+  );
+  const guarded = !!diode && placed.has(diode.id);
+  // D9 state + energize + burnout logic are lifted into App so the relay
+  // closes bench-wide (3D + telemetry) even before Power on / Run. Snapping
+  // HIGH→LOW additionally runs the inductive back-EMF watchdog.
+  const toggle = () => {
+    const next = !d9High;
+    onD9Toggle?.(next);
+    if (d9High && !next) onTriggerBurnout?.();
+  };
+  const d9 = d9High;
+
+  return (
+    <>
+      <Lcd warn={!guarded}>
+        <div className="flex items-baseline justify-between">
+          <span>D9 BASE · {d9 ? "HIGH" : "LOW"}</span>
+          <span className="text-[11px] font-bold">{d9 ? "5.0 V" : "0.0 V"}</span>
+        </div>
+      </Lcd>
+      <div className="mt-1.5 flex items-center gap-2">
+        <HwButton onClick={toggle} active={d9}>
+          D9 {d9 ? "High" : "Low"}
+        </HwButton>
+        <span
+          className={`ml-auto text-[8px] tracking-widest ${
+            guarded ? "text-[#8a8378]" : "text-[#ff7a5c]"
+          }`}
+        >
+          {guarded ? "1N4007 ✓" : "NO FLYBACK"}
+        </span>
+      </div>
+    </>
+  );
+}
+
+/* ---------- Fig. 04 · ESP32-S3 — WS2812 swatches + Wi-Fi TX burst ---------- */
+
+const WS_SWATCHES = [
+  { name: "RED", hex: "#ff1a3c" },
+  { name: "GRN", hex: "#2bd96b" },
+  { name: "BLU", hex: "#2b6bff" },
+  { name: "AMB", hex: "#ffb020" },
+  { name: "WHT", hex: "#f5f2ea" },
+  { name: "OFF", hex: "#111111" },
+];
+
+function RadioBench({
+  parts,
+  placed,
+  onFault,
+  onLog,
+}: Pick<LabInstrumentPanelProps, "parts" | "placed" | "onFault" | "onLog">) {
+  const [sw, setSw] = useState(WS_SWATCHES[0]);
+
+  const txBurst = () => {
+    // the 10µF bulk cap: prefer the explicit 10µF value, else the first can cap
+    const cap =
+      parts.find(
+        (p) =>
+          (p.kind === "cap" || p.kind === "ecap") && /10\s*[µu]F/i.test(p.value ?? ""),
+      ) ?? parts.find((p) => p.kind === "cap" || p.kind === "ecap");
+    if (cap && !placed.has(cap.id)) {
+      onFault({
+        partId: cap.id,
+        partName: cap.name,
+        severity: "degraded",
+        message:
+          "BROWNOUT WARNING: the Wi-Fi TX burst pulls ~500mA spikes through the 3V3 rail. Without the 10µF bulk capacitor the rail sags below the ESP32-S3's brownout threshold and the radio resets mid-packet.",
+      });
+      return;
+    }
+    onLog(`> Wi-Fi TX burst OK · 3V3 rail stable · WS2812 ${sw.name} ${sw.hex}`);
+  };
+
+  return (
+    <>
+      <div className="mb-1 flex items-center justify-between px-0.5">
+        <span className="text-[8px] tracking-widest text-[#8a8378]">WS2812 · GPIO48</span>
+        <span className="font-mono text-[9px] text-[#9fe870]">{sw.hex}</span>
+      </div>
+      <div className="mb-1.5 flex gap-1 px-0.5">
+        {WS_SWATCHES.map((s) => (
+          <button
+            key={s.hex}
+            title={`WS2812 → ${s.name}`}
+            onClick={() => {
+              setSw(s);
+              onLog(`> WS2812 set to ${s.name} (${s.hex}).`);
+            }}
+            style={{ background: s.hex }}
+            className={`h-4 w-4 rounded-sm border transition hover:scale-110 ${
+              sw.hex === s.hex ? "border-[#c8b26a] ring-1 ring-[#c8b26a]" : "border-[#4a453c]"
+            }`}
+          />
+        ))}
+      </div>
+      <HwButton onClick={txBurst} danger>
+        Wi-Fi TX Burst
+      </HwButton>
+    </>
+  );
+}
+
+/* ---------- Fig. 05 · ultrasonic — target distance slider + echo readout ---------- */
+
+function SonarRanger({
+  targetDistance,
+  onTargetDistance,
+}: Pick<LabInstrumentPanelProps, "targetDistance" | "onTargetDistance">) {
+  const echoUs = Math.round(targetDistance * 58); // 58 µs per cm round-trip
+  return (
+    <>
+      <Lcd>
+        <Readout label="TARGET" value={`${targetDistance} cm`} />
+        <Readout label="ECHO" value={`${echoUs} µs`} />
+      </Lcd>
+      <input
+        type="range"
+        min={5}
+        max={200}
+        step={1}
+        value={targetDistance}
+        onChange={(e) => onTargetDistance(Number(e.target.value))}
+        title="Move the reflector target 5–200 cm from the transducers"
+        className="mt-2 w-full accent-[#c8b26a]"
+      />
+      <div className="mt-0.5 flex items-center justify-between text-[8px] tracking-widest text-[#8a8378]">
+        <span>5 cm</span>
+        <span className="animate-pulse text-[#c8b26a]">● PING</span>
+        <span>200 cm</span>
+      </div>
+    </>
+  );
+}
+
+/* ---------- module router ---------- */
+
+export default function LabInstrumentPanel(props: LabInstrumentPanelProps) {
+  const { boardIndex } = props;
+  if (boardIndex < 0 || boardIndex > 4) return null;
+
+  let tag = "";
+  let title = "";
+  let body: ReactNode = null;
+  switch (boardIndex) {
+    case 0:
+      tag = "LP-01";
+      title = "LOGIC PROBE · D13";
+      body = <D13Probe {...props} />;
+      break;
+    case 1:
+      tag = "DM-02";
+      title = "LED BRANCH · I-V";
+      body = <OhmMeter {...props} />;
+      break;
+    case 2:
+      tag = "SG-03";
+      title = "BASE DRIVE · D9";
+      body = <BaseDrive {...props} />;
+      break;
+    case 3:
+      tag = "RF-04";
+      title = "ESP32-S3 RADIO";
+      body = <RadioBench {...props} />;
+      break;
+    case 4:
+      tag = "SR-05";
+      title = "SONAR · HC-SR04";
+      body = <SonarRanger {...props} />;
+      break;
+    default:
+      return null;
+  }
+
+  return (
+    <Module tag={tag} title={title}>
+      {body}
+    </Module>
+  );
+}

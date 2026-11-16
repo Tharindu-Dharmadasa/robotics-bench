@@ -28,6 +28,7 @@ import {
   matchGlbPart,
   normPartName,
 } from "./PartGeometry";
+import CircuitWireOverlay from "./CircuitWireOverlay";
 import { COLORS, PCB_T } from "../data/boards";
 import type { BoardSpec, FaultSeverity, Part, SimStatus } from "../types/simulator";
 
@@ -712,6 +713,55 @@ function UartLeds({ active }: { active: boolean }) {
   );
 }
 
+/* ---------- HC-SR04 reflector target (lab instrument slider) ---------- */
+
+/**
+ * Small retro-reflective target block standing in front of the sonar board's
+ * transducer cans along the acoustic axis (+X). The 2D slider distance
+ * (5–200 cm) is compressed into bench units so the full range stays in frame;
+ * the block glides toward/away with an exponential ease. Purely procedural.
+ */
+function ReflectorTarget({ distance, parts }: { distance: number; parts: Part[] }) {
+  const g = useRef<THREE.Group>(null);
+  // anchor on the T/R cans: front-most transducer x, centred between them on z
+  const cans = parts.filter((p) => p.kind === "transducer");
+  const x0 = cans.length ? Math.max(...cans.map((c) => c.p[0])) : 1.7;
+  const z0 = cans.length
+    ? cans.reduce((s, c) => s + c.p[1], 0) / cans.length
+    : 0;
+  // 5 cm → 1.0 u from the cans … 200 cm → 9.5 u (compressed bench scale)
+  const target = x0 + 1 + ((distance - 5) / 195) * 8.5;
+
+  useFrame((_, dt) => {
+    if (!g.current) return;
+    g.current.position.x = THREE.MathUtils.lerp(
+      g.current.position.x,
+      target,
+      1 - Math.exp(-dt * 6),
+    );
+  });
+
+  return (
+    <group ref={g} position={[target, 0, z0]}>
+      {/* base plate resting flush with the board's underside plane */}
+      <mesh castShadow receiveShadow position={[0, -PCB_T / 2 + 0.03, 0]}>
+        <boxGeometry args={[0.9, 0.06, 1.7]} />
+        <meshStandardMaterial color="#4a453c" roughness={0.7} />
+      </mesh>
+      {/* target block body */}
+      <mesh castShadow position={[0, -PCB_T / 2 + 0.6, 0]}>
+        <boxGeometry args={[0.5, 1.1, 1.3]} />
+        <meshStandardMaterial color="#b9b3a6" roughness={0.5} metalness={0.2} />
+      </mesh>
+      {/* retro-reflective patch facing back toward the transducers (-X) */}
+      <mesh position={[-0.26, -PCB_T / 2 + 0.6, 0]} rotation={[0, -Math.PI / 2, 0]}>
+        <planeGeometry args={[0.9, 0.9]} />
+        <meshStandardMaterial color="#f2ede1" roughness={0.2} metalness={0.5} />
+      </mesh>
+    </group>
+  );
+}
+
 /* ---------- Viewport ---------- */
 
 interface Viewport3DProps {
@@ -741,6 +791,14 @@ interface Viewport3DProps {
   hover: string | null;
   onHover: (label: string | null) => void;
   onGlbFallback: () => void;
+  /** Sonar target distance in cm (5–200) from the lab instrument panel. */
+  targetDistance?: number;
+  /** 3D jumper-wire / current-flow overlay visible (ControlColumn toggle). */
+  showWires?: boolean;
+  /** Blink phase of the running sketch (gates pulsed wire loops). */
+  blink?: boolean;
+  /** Fig. 03: D9 held HIGH with the control/load loop complete (relay closed). */
+  d9Energized?: boolean;
 }
 
 const SEVERITY_BADGE: Record<FaultSeverity, string> = {
@@ -770,6 +828,10 @@ export default function Viewport3D({
   hover,
   onHover,
   onGlbFallback,
+  targetDistance,
+  showWires = true,
+  blink = false,
+  d9Energized = false,
 }: Viewport3DProps) {
   const [glbUrl, setGlbUrl] = useState<string | null>(null);
 
@@ -914,6 +976,17 @@ export default function Viewport3D({
         ) : (
           procedural
         )}
+        {/* 3D jumper wires + directional current flow (procedural bench view) */}
+        {viewMode === "parts" && showWires && (
+          <CircuitWireOverlay
+            spec={spec}
+            placed={placed}
+            powered={flow}
+            running={running}
+            blink={blink}
+            d9Energized={d9Energized}
+          />
+        )}
         {/* Burn-out effects render for both the procedural scene and a loaded .glb */}
         {burnPart && (
           <FaultOverlay
@@ -921,6 +994,10 @@ export default function Viewport3D({
             part={burnPart}
             explode={explode}
           />
+        )}
+        {/* Sonar bench: reflector target block on the acoustic axis (+X) */}
+        {spec.boardStyle === "hc-sr04" && targetDistance != null && (
+          <ReflectorTarget distance={targetDistance} parts={parts} />
         )}
         <mesh
           rotation={[-Math.PI / 2, 0, 0]}
