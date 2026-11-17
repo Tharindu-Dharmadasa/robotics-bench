@@ -168,7 +168,6 @@ export function evaluateCustomCircuit(
 
       // Check for any series resistor between the nets
       let resistorFound = false;
-      let resistorId = "";
       let resistorType: CustomComponentType | null = null;
       for (const r of parts) {
         if (r.type === "res_220" || r.type === "res_10k") {
@@ -182,7 +181,6 @@ export function evaluateCustomCircuit(
             (bNet === anodeNet && aNet === cathodeNet)
           ) {
             resistorFound = true;
-            resistorId = r.id;
             resistorType = r.type;
             break;
           }

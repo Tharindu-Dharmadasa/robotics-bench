@@ -20,6 +20,7 @@ import { getBoardTelemetryLine } from "./data/telemetry";
 import { oledBench } from "./components/boards/Fig12Oled";
 import { fusionBench } from "./components/boards/Fig13Fusion";
 import type { BoardSpec, FaultRule, Part, PartEffect, SimStatus } from "./types/simulator";
+import CustomLabWorkspace from "./customLab/CustomLabWorkspace";
 
 /**
  * ~60% of a board's parts arrive pre-placed so every lab renders immediately.
@@ -45,6 +46,8 @@ const effectTag = (severity: PartEffect["severity"]) =>
 
 export default function App() {
   const [board, setBoard] = useState(0);
+  /** Custom Experiment Bench (sandbox) open — replaces the standard board stage. */
+  const [showCustomLab, setShowCustomLab] = useState(false);
   const [placed, setPlaced] = useState<Set<string>>(() =>
     initialPlaced(BOARD_SPECS[0]),
   );
@@ -149,6 +152,8 @@ export default function App() {
     const spec = BOARD_SPECS[index];
     if (!spec) return;
     setBoard(index);
+    // Selecting a real board leaves the sandbox and returns to the bench.
+    setShowCustomLab(false);
     setPlaced(initialPlaced(spec));
     setSoldered(false);
     setUsb(false);
@@ -757,7 +762,12 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#EAE6DF] font-mono text-[#222]">
-      <Sidebar board={board} onSelect={selectBoard} />
+      <Sidebar
+        board={board}
+        onSelect={selectBoard}
+        customBench={showCustomLab}
+        onCustomBench={() => setShowCustomLab(true)}
+      />
 
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1">
@@ -805,40 +815,42 @@ export default function App() {
             onInstrumentLog={log}
           />
 
-          <Viewport3D
-            spec={activeBoard}
-            parts={parts}
-            placed={placed}
-            soldered={soldered}
-            usb={usb}
-            explode={explode}
-            color={color}
-            litMap={litMap}
-            count={count}
-            total={total}
-            status={status}
-            running={running}
-            blink={blink}
-            values={values}
-            eduFault={fault}
-            damagedPartId={faultPart?.id}
-            faultPartId={faultPart?.p}
-            viewMode={viewMode}
-            showWires={showWires}
-            d9Energized={d9Energized}
-            imuTilt={imuTilt}
-            encoderStep={encoderStep}
-            encoderPressed={encoderPressed}
-            pcaAngle={pcaAngle}
-            onRemovePart={togglePart}
-            onRepair={repairFault}
-            hover={hover}
-            onHover={setHover}
-            onGlbFallback={() =>
-              log("> No usable .glb model — procedural scene engaged.")
-            }
-            targetDistance={targetDistance}
-          />
+          {!showCustomLab && (
+            <Viewport3D
+              spec={activeBoard}
+              parts={parts}
+              placed={placed}
+              soldered={soldered}
+              usb={usb}
+              explode={explode}
+              color={color}
+              litMap={litMap}
+              count={count}
+              total={total}
+              status={status}
+              running={running}
+              blink={blink}
+              values={values}
+              eduFault={fault}
+              damagedPartId={faultPart?.id}
+              faultPartId={faultPart?.p}
+              viewMode={viewMode}
+              showWires={showWires}
+              d9Energized={d9Energized}
+              imuTilt={imuTilt}
+              encoderStep={encoderStep}
+              encoderPressed={encoderPressed}
+              pcaAngle={pcaAngle}
+              onRemovePart={togglePart}
+              onRepair={repairFault}
+              hover={hover}
+              onHover={setHover}
+              onGlbFallback={() =>
+                log("> No usable .glb model — procedural scene engaged.")
+              }
+              targetDistance={targetDistance}
+            />
+          )}
         </div>
 
         <BottomPanels
@@ -850,6 +862,12 @@ export default function App() {
           logRef={logRef}
         />
       </main>
+
+      {/* Full-screen Custom Experiment Sandbox overlay — hides the 13-lab
+          sidebar and bottom panels so the 3D breadboard gets the whole window. */}
+      {showCustomLab && (
+        <CustomLabWorkspace onClose={() => setShowCustomLab(false)} />
+      )}
     </div>
   );
 }

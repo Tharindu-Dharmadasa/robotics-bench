@@ -3,16 +3,35 @@ import { BOARDS } from "../data/boards";
 interface SidebarProps {
   board: number;
   onSelect: (index: number) => void;
+  onCustomBench: () => void;
+  /** True while the Custom Experiment Bench (sandbox) is open. */
+  customBench?: boolean;
 }
 
-export default function Sidebar({ board, onSelect }: SidebarProps) {
+export default function Sidebar({
+  board,
+  onSelect,
+  onCustomBench,
+  customBench = false,
+}: SidebarProps) {
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-[#222]">
-      <div className="border-b border-[#222] p-4">
+    <aside className="flex w-60 shrink-0 flex-col border-r border-[#222]" style={{ backgroundColor: "#EAE6DF" }}>
+      <div className="border-b border-[#222] p-4" style={{ backgroundColor: "#EAE6DF" }}>
         <h1 className="text-lg font-bold">Robotics Bench</h1>
         <p className="mt-1 text-xs leading-snug text-[#555]">
           Real boards you can build, power up and break.
         </p>
+        {/* Custom Experiment Bench button */}
+        <button
+          onClick={onCustomBench}
+          className={`mt-2 w-full rounded-md px-3 py-2 text-left transition ${
+            customBench
+              ? "bg-[#EAE6DF] text-[#1E1E1C] ring-1 ring-[#1E1E1C]"
+              : "bg-[#1E1E1C] text-[#EAE6DF] hover:bg-[#333]"
+          }`}
+        >
+          ⚡ Custom Experiment Bench (Sandbox)
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto p-2">
         {BOARDS.map(([n, s], i) => (
@@ -21,9 +40,7 @@ export default function Sidebar({ board, onSelect }: SidebarProps) {
             onClick={() => onSelect(i)}
             className={`mb-1 w-full rounded-md px-3 py-2 text-left transition ${board === i ? "bg-[#222] text-[#EAE6DF]" : "hover:bg-[#dcd6cb]"}`}
           >
-            <div className="text-[10px] opacity-60">
-              Fig. {String(i + 1).padStart(2, "0")}
-            </div>
+            <div className="text-[10px] opacity-60">Fig. {String(i + 1).padStart(2, "0")}</div>
             <div className="text-sm font-bold">{n}</div>
             <div className="text-[10px] opacity-60">{s}</div>
           </button>
