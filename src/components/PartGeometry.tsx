@@ -232,14 +232,31 @@ export function Geo({
   part,
   lit,
   energy = 1,
+  charred = false,
+  damagedPartId,
+  faultPartId,
 }: {
   part: Part;
   lit: boolean;
   /** Output-energy factor 0..1 (e.g. 10kΩ resistor => dim LED). */
   energy?: number;
+  /** Stage 2 of the failure sequence: forwarded to the Batch23 parts. */
+  charred?: boolean;
+  /** Fault-owner part id + [x, z] coords, forwarded to the Batch23 parts. */
+  damagedPartId?: string;
+  faultPartId?: [number, number];
 }) {
   if (isBatch23Kind(part.kind) && (part.kind !== "diode" || part.id.startsWith("diodes_"))) {
-    return <Batch23PartGeo part={part} lit={lit} energy={energy} />;
+    return (
+      <Batch23PartGeo
+        part={part}
+        lit={lit}
+        energy={energy}
+        charred={charred}
+        damagedPartId={damagedPartId}
+        faultPartId={faultPartId}
+      />
+    );
   }
   switch (part.kind) {
     case "dip": {
@@ -1615,14 +1632,67 @@ const CHAR_COLOR = new THREE.Color("#181414");
 /** Inner ember glow colour that fades as the husk cools. */
 const EMBER_COLOR = new THREE.Color("#ff3b00");
 
-type CharCapture = {
-  m: THREE.MeshStandardMaterial;
+/** Pristine material finish snapshotted into mesh.userData.origMaterial. */
+type OrigFinish = {
   color: THREE.Color;
   emissive: THREE.Color;
+  emissiveIntensity: number;
   roughness: number;
   metalness: number;
-  emissiveIntensity: number;
 };
+
+/** First material of a mesh (every part mesh here is single-material). */
+const firstMaterial = (mesh: THREE.Mesh) =>
+  (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as
+    | THREE.Material
+    | undefined;
+
+/**
+ * Snapshot every descendant MeshStandardMaterial's pristine finish into
+ * mesh.userData.origMaterial. Called once on first mount — BEFORE any burnout
+ * charring can mutate the materials — so Repair / Reset Fault / Strip to bare
+ * PCB can always restore the original look.
+ */
+function snapshotFinishes(root: THREE.Object3D | null) {
+  if (!root) return;
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || mesh.userData.origMaterial) return;
+    const m = firstMaterial(mesh);
+    if (m instanceof THREE.MeshStandardMaterial) {
+      const orig: OrigFinish = {
+        color: m.color.clone(),
+        emissive: m.emissive.clone(),
+        emissiveIntensity: m.emissiveIntensity,
+        roughness: m.roughness,
+        metalness: m.metalness,
+      };
+      mesh.userData.origMaterial = orig;
+    }
+  });
+}
+
+/**
+ * Copy every snapshotted pristine finish back onto its material — the
+ * damaged→undamaged transition that clears the burnout red tint. (Scorch
+ * decal / sparks / smoke live in Viewport3D's FaultOverlay, which unmounts
+ * with the fault.)
+ */
+function restoreFinishes(root: THREE.Object3D | null) {
+  if (!root) return;
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const orig = mesh.userData.origMaterial as OrigFinish | undefined;
+    const m = firstMaterial(mesh);
+    if (!orig || !(m instanceof THREE.MeshStandardMaterial)) return;
+    m.color.copy(orig.color);
+    m.emissive.copy(orig.emissive);
+    m.emissiveIntensity = orig.emissiveIntensity;
+    m.roughness = orig.roughness;
+    m.metalness = orig.metalness;
+  });
+}
 
 export function AnimatedPart({
   part,
@@ -1631,6 +1701,8 @@ export function AnimatedPart({
   lit,
   energy = 1,
   charred = false,
+  damagedPartId,
+  faultPartId,
   onHover,
 }: {
   part: Part;
@@ -1641,14 +1713,37 @@ export function AnimatedPart({
   energy?: number;
   /** Stage 2 of the failure sequence: the part scorches to matte carbon. */
   charred?: boolean;
+  /** Fault-owner part id + [x, z] coords, forwarded to the part geometry. */
+  damagedPartId?: string;
+  faultPartId?: [number, number];
   onHover: (s: string | null) => void;
 }) {
   const ref = useRef<THREE.Group>(null);
   const layer = part.smd ? 1 : part.kind === "hdr" ? 3 : 2;
   // charring state (pure refs — no per-frame state updates)
-  const captured = useRef<CharCapture[] | null>(null);
-  const wasCharred = useRef(false);
+  const wasDamaged = useRef(false);
   const charT = useRef(0);
+  /** Materials being charred in useFrame (gathered once per burnout). */
+  const charMats = useRef<THREE.MeshStandardMaterial[] | null>(null);
+
+  // Snapshot the pristine finishes once, on first mount, into
+  // mesh.userData.origMaterial — the restore source for every later repair.
+  useEffect(() => {
+    snapshotFinishes(ref.current);
+  }, []);
+
+  // isDamaged (charred) true → false — Repair / Reset Fault / Strip to bare
+  // PCB: explicitly put the pristine finish back so no red burn tint survives.
+  useEffect(() => {
+    if (charred) {
+      wasDamaged.current = true;
+      return;
+    }
+    if (!wasDamaged.current) return;
+    wasDamaged.current = false;
+    charMats.current = null;
+    restoreFinishes(ref.current);
+  }, [charred]);
 
   useFrame((_, dt) => {
     const g = ref.current;
@@ -1661,59 +1756,29 @@ export function AnimatedPart({
     g.rotation.y += ((placed ? 0 : 2) - g.rotation.y) * k;
 
     /* ---- Stage 2 · component charring + fading inner ember ---- */
-    if (charred && !wasCharred.current) {
-      wasCharred.current = true;
-      charT.current = 0;
-      if (!captured.current) {
-        const mats: CharCapture[] = [];
+    if (charred) {
+      if (!charMats.current) {
+        const mats: THREE.MeshStandardMaterial[] = [];
         g.traverse((o) => {
           const mesh = o as THREE.Mesh;
           if (!mesh.isMesh) return;
-          const m = (
-            Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
-          ) as THREE.MeshStandardMaterial | undefined;
-          if (m && (m as THREE.MeshStandardMaterial).color) {
-            mats.push({
-              m,
-              color: m.color.clone(),
-              emissive: m.emissive.clone(),
-              roughness: m.roughness,
-              metalness: m.metalness,
-              emissiveIntensity: m.emissiveIntensity,
-            });
-          }
+          const m = firstMaterial(mesh);
+          if (m instanceof THREE.MeshStandardMaterial) mats.push(m);
         });
-        captured.current = mats;
+        charMats.current = mats;
       }
-    }
-    if (!charred && wasCharred.current) {
-      // repaired: restore the original finish
-      wasCharred.current = false;
-      captured.current?.forEach(
-        ({ m, color, emissive, roughness, metalness, emissiveIntensity }) => {
-          m.color.copy(color);
-          m.emissive.copy(emissive);
-          m.roughness = roughness;
-          m.metalness = metalness;
-          m.emissiveIntensity = emissiveIntensity;
-        },
-      );
-    }
-    if (charred && captured.current) {
       charT.current += dt;
       const t = charT.current;
       // fast scorch: lerp every finish toward matte carbon (~0.3s)
       const kk = 1 - Math.exp(-dt * 9);
-      captured.current.forEach(({ m }) => {
+      // ember glow decays over ~1.6s with a hot flicker, then dies out
+      const ember =
+        Math.max(0, 2.2 * Math.exp(-t * 1.6)) * (0.8 + Math.sin(t * 23) * 0.2);
+      charMats.current.forEach((m) => {
         m.color.lerp(CHAR_COLOR, kk);
         m.emissive.lerp(EMBER_COLOR, kk);
         m.roughness += (1 - m.roughness) * kk;
         m.metalness += (0.05 - m.metalness) * kk;
-      });
-      // ember glow decays over ~1.6s with a hot flicker, then dies out
-      const ember =
-        Math.max(0, 2.2 * Math.exp(-t * 1.6)) * (0.8 + Math.sin(t * 23) * 0.2);
-      captured.current.forEach(({ m }) => {
         m.emissiveIntensity = ember;
       });
     }
@@ -1729,7 +1794,14 @@ export function AnimatedPart({
       }}
       onPointerOut={() => onHover(null)}
     >
-      <Geo part={part} lit={lit} energy={energy} />
+      <Geo
+        part={part}
+        lit={lit}
+        energy={energy}
+        charred={charred}
+        damagedPartId={damagedPartId}
+        faultPartId={faultPartId}
+      />
     </group>
   );
 }

@@ -5,13 +5,13 @@ import type { Part } from "../types/simulator";
 
 /**
  * LabInstrumentPanel — retro-hardware instrument rack bolted under the bench
- * title. One module per lab (board indices 0–4); renders nothing otherwise.
- * Every interaction stays 2D DOM (AGENTS.md rule 1: never <Html>/<Text> inside
- * <Canvas>) and feeds structured faults / serial lines back to the bench
- * through the onFault / onLog callbacks.
+ * title. One module per lab (board indices 0–4 and 8–10); renders nothing
+ * otherwise. Every interaction stays 2D DOM (AGENTS.md rule 1: never
+ * <Html>/<Text> inside <Canvas>) and feeds structured faults / serial lines
+ * back to the bench through the onFault / onLog callbacks.
  */
 export interface LabInstrumentPanelProps {
-  /** Zero-based active board index (0–4). */
+  /** Zero-based active board index (0–4 · 8–10). */
   boardIndex: number;
   parts: Part[];
   placed: Set<string>;
@@ -30,6 +30,19 @@ export interface LabInstrumentPanelProps {
   onD9Toggle?: (next: boolean) => void;
   /** Fig. 03 · fire the flyback watchdog on the D9 HIGH→LOW edge (App logic). */
   onTriggerBurnout?: () => void;
+  /** Fig. 09 · IMU tilt-rig attitude in degrees (lifted to App for 3D + telemetry). */
+  imuTilt?: { pitch: number; roll: number };
+  onImuTiltChange?: (tilt: { pitch: number; roll: number }) => void;
+  onImuReset?: () => void;
+  /** Fig. 10 · KY-040 detent count + axial SW state (lifted to App). */
+  encoderStep?: number;
+  encoderPressed?: boolean;
+  /** dir: 1 = CW (+1 detent), -1 = CCW (-1 detent). */
+  onEncoderRotate?: (dir: 1 | -1) => void;
+  onEncoderSetPressed?: (pressed: boolean) => void;
+  /** Fig. 11 · PCA9685 servo angle 0–180° (lifted to App). */
+  pcaAngle?: number;
+  onPcaAngleChange?: (deg: number) => void;
   /** Raise a structured fault (HUD banner + repair flow). */
   onFault: (fault: EduFault) => void;
   /** Append a line to the serial monitor. */
@@ -85,15 +98,22 @@ function Readout({ label, value, warn = false }: { label: string; value: string;
   );
 }
 
-/** Chunky hardware button; active = latched (amber), danger = red accent. */
+/** Chunky hardware button; active = latched (amber), danger = red accent.
+ *  Optional pointer handlers turn it into a momentary switch (shaft press). */
 function HwButton({
   onClick,
+  onPointerDown,
+  onPointerUp,
+  onPointerLeave,
   children,
   active = false,
   danger = false,
   disabled = false,
 }: {
-  onClick: () => void;
+  onClick?: () => void;
+  onPointerDown?: () => void;
+  onPointerUp?: () => void;
+  onPointerLeave?: () => void;
   children: ReactNode;
   active?: boolean;
   danger?: boolean;
@@ -102,6 +122,9 @@ function HwButton({
   return (
     <button
       onClick={onClick}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerLeave}
       disabled={disabled}
       className={`rounded border border-[#222] px-2 py-1 text-[9px] font-bold uppercase tracking-wider transition active:translate-y-px ${
         disabled
@@ -372,11 +395,150 @@ function SonarRanger({
   );
 }
 
+/* ---------- Fig. 09 · MPU-6050 — IMU tilt rig (pitch/roll ±45°) ---------- */
+
+function ImuTiltRig({
+  imuTilt,
+  onImuTiltChange,
+  onImuReset,
+}: Pick<
+  LabInstrumentPanelProps,
+  "imuTilt" | "onImuTiltChange" | "onImuReset"
+>) {
+  const pitch = imuTilt?.pitch ?? 0;
+  const roll = imuTilt?.roll ?? 0;
+  const fmtDeg = (v: number) =>
+    `${v >= 0 ? "+" : "-"}${Math.abs(v).toFixed(1)}°`;
+  return (
+    <>
+      <Lcd>
+        <Readout label="PITCH" value={fmtDeg(pitch)} />
+        <Readout label="ROLL" value={fmtDeg(roll)} />
+        <Readout label="ACCEL Z" value={`${(Math.cos((pitch * Math.PI) / 180) * Math.cos((roll * Math.PI) / 180)).toFixed(2)} g`} />
+      </Lcd>
+      <input
+        type="range"
+        min={-45}
+        max={45}
+        step={1}
+        value={pitch}
+        onChange={(e) =>
+          onImuTiltChange?.({ pitch: Number(e.target.value), roll })
+        }
+        title="Pitch the GY-521 rig -45°..+45° about the board's lateral axis"
+        className="mt-2 w-full accent-[#c8b26a]"
+      />
+      <input
+        type="range"
+        min={-45}
+        max={45}
+        step={1}
+        value={roll}
+        onChange={(e) =>
+          onImuTiltChange?.({ pitch, roll: Number(e.target.value) })
+        }
+        title="Roll the GY-521 rig -45°..+45° about the board's long axis"
+        className="mt-1 w-full accent-[#c8b26a]"
+      />
+      <div className="mt-0.5 flex items-center justify-between text-[8px] tracking-widest text-[#8a8378]">
+        <span>-45°</span>
+        <span>PITCH / ROLL</span>
+        <span>+45°</span>
+      </div>
+      <div className="mt-1.5">
+        <HwButton onClick={() => onImuReset?.()}>Reset Level</HwButton>
+      </div>
+    </>
+  );
+}
+
+/* ---------- Fig. 10 · KY-040 — detent rotator + axial SW press ---------- */
+
+function EncoderDrive({
+  encoderStep,
+  encoderPressed,
+  onEncoderRotate,
+  onEncoderSetPressed,
+}: Pick<
+  LabInstrumentPanelProps,
+  "encoderStep" | "encoderPressed" | "onEncoderRotate" | "onEncoderSetPressed"
+>) {
+  const step = encoderStep ?? 0;
+  return (
+    <>
+      <Lcd warn={!!encoderPressed}>
+        <div className="flex items-baseline justify-between">
+          <span className="text-[8px] tracking-widest text-[#8a8378]">STEP</span>
+          <span className="font-mono text-lg font-bold leading-none">{step}</span>
+        </div>
+        <div className="mt-1 flex items-baseline justify-between">
+          <span className="text-[8px] tracking-widest text-[#8a8378]">
+            SHAFT SW
+          </span>
+          <span className="font-mono text-[11px] font-bold">
+            {encoderPressed ? "PRESSED" : "OPEN"}
+          </span>
+        </div>
+      </Lcd>
+      <div className="mt-1.5 flex items-center gap-1.5">
+        <HwButton onClick={() => onEncoderRotate?.(-1)}>⟲ CCW</HwButton>
+        <HwButton onClick={() => onEncoderRotate?.(1)}>⟳ CW</HwButton>
+        <HwButton
+          active={!!encoderPressed}
+          onPointerDown={() => onEncoderSetPressed?.(true)}
+          onPointerUp={() => onEncoderSetPressed?.(false)}
+          onPointerLeave={() => onEncoderSetPressed?.(false)}
+        >
+          Press Shaft
+        </HwButton>
+      </div>
+      <div className="mt-1 text-[8px] tracking-widest text-[#8a8378]">
+        1 DETENT = π/10 SHAFT RAD · SW ZEROS COUNT
+      </div>
+    </>
+  );
+}
+
+/* ---------- Fig. 11 · PCA9685 — 16-channel servo PWM drive ---------- */
+
+function PwmServoDrive({
+  pcaAngle,
+  onPcaAngleChange,
+}: Pick<LabInstrumentPanelProps, "pcaAngle" | "onPcaAngleChange">) {
+  const angle = pcaAngle ?? 90;
+  const pulseUs = Math.round(1000 + (angle / 180) * 1000);
+  const duty = (pulseUs / 20000) * 100; // 50 Hz servo frame = 20 ms period
+  return (
+    <>
+      <Lcd>
+        <Readout label="ANGLE" value={`${angle}°`} />
+        <Readout label="PULSE" value={`${pulseUs} µs`} />
+        <Readout label="DUTY" value={`${duty.toFixed(2)}% @ 50Hz`} />
+      </Lcd>
+      <input
+        type="range"
+        min={0}
+        max={180}
+        step={1}
+        value={angle}
+        onChange={(e) => onPcaAngleChange?.(Number(e.target.value))}
+        title="Drive all 16 PCA9685 channels with a 1.0–2.0 ms servo pulse"
+        className="mt-2 w-full accent-[#c8b26a]"
+      />
+      <div className="mt-0.5 flex items-center justify-between text-[8px] tracking-widest text-[#8a8378]">
+        <span>0°</span>
+        <span className="animate-pulse text-[#c8b26a]">● CH 0–15</span>
+        <span>180°</span>
+      </div>
+    </>
+  );
+}
+
 /* ---------- module router ---------- */
 
 export default function LabInstrumentPanel(props: LabInstrumentPanelProps) {
   const { boardIndex } = props;
-  if (boardIndex < 0 || boardIndex > 4) return null;
+  if (boardIndex < 0 || boardIndex > 10) return null;
 
   let tag = "";
   let title = "";
@@ -406,6 +568,21 @@ export default function LabInstrumentPanel(props: LabInstrumentPanelProps) {
       tag = "SR-05";
       title = "SONAR · HC-SR04";
       body = <SonarRanger {...props} />;
+      break;
+    case 8:
+      tag = "IM-09";
+      title = "IMU TILT · MPU-6050";
+      body = <ImuTiltRig {...props} />;
+      break;
+    case 9:
+      tag = "EN-10";
+      title = "ROTARY · KY-040";
+      body = <EncoderDrive {...props} />;
+      break;
+    case 10:
+      tag = "PW-11";
+      title = "PWM SERVO · PCA9685";
+      body = <PwmServoDrive {...props} />;
       break;
     default:
       return null;

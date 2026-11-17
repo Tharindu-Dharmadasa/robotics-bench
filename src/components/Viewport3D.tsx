@@ -29,6 +29,8 @@ import {
   normPartName,
 } from "./PartGeometry";
 import CircuitWireOverlay from "./CircuitWireOverlay";
+import { ky040Shaft } from "./boards/Fig10Encoder";
+import { pca9685Pwm } from "./boards/Fig11PCA9685";
 import { COLORS, PCB_T } from "../data/boards";
 import type { BoardSpec, FaultSeverity, Part, SimStatus } from "../types/simulator";
 
@@ -491,9 +493,12 @@ function playBurnoutSound() {
  */
 function FaultOverlay({
   part,
+  coords,
   explode,
 }: {
   part: Part;
+  /** Explicit [x, z] origin from the bench (defaults to the part's own coords). */
+  coords?: [number, number];
   explode: number;
 }) {
   const root = useRef<THREE.Group>(null);
@@ -503,6 +508,7 @@ function FaultOverlay({
   const smoke = useRef<THREE.Group>(null);
   const age = useRef(0);
   const layer = part.smd ? 1 : part.kind === "hdr" ? 3 : 2;
+  const origin = coords ?? part.p;
 
   // spark ballistics: initial velocities, biased upward and outward
   const sparkState = useMemo(
@@ -617,7 +623,7 @@ function FaultOverlay({
   });
 
   return (
-    <group ref={root} position={[part.p[0], 7, part.p[1]]} scale={0.001}>
+    <group ref={root} position={[origin[0], 7, origin[1]]} scale={0.001}>
       {/* Stage 1 · arc flash */}
       <pointLight
         ref={flash}
@@ -673,6 +679,80 @@ function FaultOverlay({
           </mesh>
         ))}
       </group>
+    </group>
+  );
+}
+
+/* ---------- Missing / halted part locator (halt + degraded faults) ---------- */
+
+/**
+ * Animated pulsing red/amber locator rings hovering at y = 0.03 directly over
+ * the solder pads of a removed (open-circuit) or mis-behaving part, so the
+ * learner sees at a glance where the fault occurred on the board. Two rings
+ * breathe in anti-phase — scale and emissiveIntensity driven purely in
+ * useFrame, no state.
+ */
+function FaultLocator({
+  coords,
+  explode,
+  tone = "red",
+}: {
+  coords: [number, number];
+  explode: number;
+  /** Ring colour family: "red" for halt (open circuit), "amber" for degraded. */
+  tone?: "red" | "amber";
+}) {
+  const inner = useRef<THREE.Mesh>(null);
+  const outer = useRef<THREE.Mesh>(null);
+  const innerColor = tone === "amber" ? "#ffb020" : "#ff2b2b";
+  const outerColor = tone === "amber" ? "#ffd34d" : "#ffb020";
+
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 4.5);
+    if (inner.current) {
+      inner.current.scale.setScalar(0.85 + pulse * 0.45);
+      const m = inner.current.material as THREE.MeshStandardMaterial;
+      m.emissiveIntensity = 1.2 + pulse * 2.4;
+      m.opacity = 0.55 + pulse * 0.4;
+    }
+    if (outer.current) {
+      outer.current.scale.setScalar(1.35 - pulse * 0.45);
+      const m = outer.current.material as THREE.MeshStandardMaterial;
+      m.emissiveIntensity = 0.8 + (1 - pulse) * 2.2;
+      m.opacity = 0.3 + (1 - pulse) * 0.45;
+    }
+  });
+
+  return (
+    // the board itself drops -explode*0.6 in the exploded view; follow it
+    <group position={[coords[0], PCB_T / 2 - explode * 0.6, coords[1]]}>
+      {/* tight red ring hugging the part's pads */}
+      <mesh ref={inner} position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.26, 0.36, 40]} />
+        <meshStandardMaterial
+          color={innerColor}
+          emissive={innerColor}
+          emissiveIntensity={2}
+          transparent
+          opacity={0.8}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+      {/* wider halo breathing outward */}
+      <mesh ref={outer} position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.44, 0.55, 40]} />
+        <meshStandardMaterial
+          color={outerColor}
+          emissive={outerColor}
+          emissiveIntensity={1.5}
+          transparent
+          opacity={0.45}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
     </group>
   );
 }
@@ -762,6 +842,41 @@ function ReflectorTarget({ distance, parts }: { distance: number; parts: Part[] 
   );
 }
 
+/* ---------- IMU tilt rig (Fig. 09 MPU-6050 bench controls) ---------- */
+
+/**
+ * Tilts the whole board assembly toward the instrument panel's rig angles
+ * (degrees → radians) with an exponential ease — the MPU-6050's serial
+ * stream reports exactly this attitude, so the board leans as the slider
+ * moves and levels again when the sketch stops. Purely procedural.
+ */
+function TiltRig({
+  pitch,
+  roll,
+  active,
+  children,
+}: {
+  pitch: number;
+  roll: number;
+  active: boolean;
+  children: ReactNode;
+}) {
+  const g = useRef<THREE.Group>(null);
+  useFrame((_, dt) => {
+    const grp = g.current;
+    if (!grp) return;
+    // +pitch = nose up about the bench Z axis · +roll = right edge down
+    // about the bench X axis — matches the telemetry's accel model
+    // (ax = sin(pitch), ay = −sin(roll), az = cos(pitch)·cos(roll)).
+    const k = 1 - Math.exp(-dt * 5);
+    const tx = active ? THREE.MathUtils.degToRad(roll) : 0;
+    const tz = active ? THREE.MathUtils.degToRad(pitch) : 0;
+    grp.rotation.x = THREE.MathUtils.lerp(grp.rotation.x, tx, k);
+    grp.rotation.z = THREE.MathUtils.lerp(grp.rotation.z, tz, k);
+  });
+  return <group ref={g}>{children}</group>;
+}
+
 /* ---------- Viewport ---------- */
 
 interface Viewport3DProps {
@@ -782,6 +897,10 @@ interface Viewport3DProps {
   values: Record<string, string>;
   /** Structured fault driving the HUD banner + burn visuals. */
   eduFault: EduFault | null;
+  /** Id of the part that caused/owns the active fault (burned victim for burnout). */
+  damagedPartId?: string;
+  /** [x, z] bench coordinates of that part — anchors the 3D fault visuals. */
+  faultPartId?: [number, number];
   /** Bench view: interactive procedural parts vs real CAD (.glb). */
   viewMode: "parts" | "cad";
   /** Click-to-remove a placed part directly on the 3D board. */
@@ -799,6 +918,13 @@ interface Viewport3DProps {
   blink?: boolean;
   /** Fig. 03: D9 held HIGH with the control/load loop complete (relay closed). */
   d9Energized?: boolean;
+  /** Fig. 09 · IMU tilt-rig attitude in degrees (drives the board tilt). */
+  imuTilt?: { pitch: number; roll: number };
+  /** Fig. 10 · KY-040 live detent count + axial SW press. */
+  encoderStep?: number;
+  encoderPressed?: boolean;
+  /** Fig. 11 · PCA9685 servo angle (0–180°) driving the channel LEDs. */
+  pcaAngle?: number;
 }
 
 const SEVERITY_BADGE: Record<FaultSeverity, string> = {
@@ -822,6 +948,8 @@ export default function Viewport3D({
   running,
   values,
   eduFault,
+  damagedPartId,
+  faultPartId,
   viewMode,
   onRemovePart,
   onRepair,
@@ -832,6 +960,10 @@ export default function Viewport3D({
   showWires = true,
   blink = false,
   d9Energized = false,
+  imuTilt,
+  encoderStep = 0,
+  encoderPressed = false,
+  pcaAngle = 90,
 }: Viewport3DProps) {
   const [glbUrl, setGlbUrl] = useState<string | null>(null);
 
@@ -862,6 +994,12 @@ export default function Viewport3D({
   const burnPart = eduFault?.burnPartId
     ? parts.find((p) => p.id === eduFault.burnPartId)
     : undefined;
+  // Fault anchor: the explicit [x, z] coords from the bench win, then the
+  // damaged part's own coordinates.
+  const faultPart = damagedPartId
+    ? parts.find((p) => p.id === damagedPartId)
+    : undefined;
+  const faultCoord = faultPartId ?? faultPart?.p;
   const hasUsbPort = parts.some((p) => p.kind === "usb");
 
   // Stage 4 · electrical pop + sizzle, once per burnout fault. The useEffect
@@ -869,6 +1007,23 @@ export default function Viewport3D({
   useEffect(() => {
     if (eduFault?.severity === "burnout") playBurnoutSound();
   }, [eduFault]);
+
+  // Publish the lab instrument state onto the board-module bench buses
+  // (module-level mutable state, same cross-component pattern as the
+  // KY-040's ky040Debounce): Fig. 10 reads the shaft step/SW in useFrame,
+  // Fig. 11 reads the servo angle for its 16 PWM activity LEDs. Safe to
+  // write on any board — only the matching board's meshes ever read them.
+  useEffect(() => {
+    ky040Shaft.step = encoderStep;
+    ky040Shaft.pressed = encoderPressed;
+  }, [encoderStep, encoderPressed]);
+  useEffect(() => {
+    pca9685Pwm.angle = pcaAngle;
+    pca9685Pwm.running = running;
+  }, [pcaAngle, running]);
+
+  // Fig. 09 · GY-521 board? (each lab's boardStyle is unique)
+  const isImuBench = spec.boardStyle === "breakout-blue";
 
   // Solder joints follow only the parts that are actually on the board.
   const placedParts = parts.filter((p) => placed.has(p.id));
@@ -920,6 +1075,8 @@ export default function Viewport3D({
                 lit={litMap(p.id)}
                 energy={p.kind === "led" && !p.smd && dimLed ? 0.22 : 1}
                 charred={burnPart?.id === p.id && eduFault?.severity === "burnout"}
+                damagedPartId={damagedPartId}
+                faultPartId={faultPartId}
                 onHover={onHover}
               />
             </group>
@@ -956,45 +1113,63 @@ export default function Viewport3D({
           shadow-camera-bottom={-8}
         />
         <directionalLight position={[-6, 4, -3]} intensity={0.3} />
-        {viewMode === "cad" && glbUrl ? (
-          <GlbBoardFallback
-            key={glbUrl}
-            fallback={procedural}
-            onError={onGlbFallback}
-          >
-            <Suspense fallback={procedural}>
-              <RealGlbBoard
-                url={glbUrl}
-                parts={parts}
-                placed={placed}
-                explode={explode}
-                onHover={onHover}
-                onRemovePart={onRemovePart}
-              />
-            </Suspense>
-          </GlbBoardFallback>
-        ) : (
-          procedural
-        )}
-        {/* 3D jumper wires + directional current flow (procedural bench view) */}
-        {viewMode === "parts" && showWires && (
-          <CircuitWireOverlay
-            spec={spec}
-            placed={placed}
-            powered={flow}
-            running={running}
-            blink={blink}
-            d9Energized={d9Energized}
-          />
-        )}
-        {/* Burn-out effects render for both the procedural scene and a loaded .glb */}
-        {burnPart && (
-          <FaultOverlay
-            key={`${spec.id}-${burnPart.id}-fault`}
-            part={burnPart}
-            explode={explode}
-          />
-        )}
+        {/* Fig. 09 · the whole board leans with the IMU tilt rig while running */}
+        <TiltRig
+          pitch={imuTilt?.pitch ?? 0}
+          roll={imuTilt?.roll ?? 0}
+          active={isImuBench && running}
+        >
+          {viewMode === "cad" && glbUrl ? (
+            <GlbBoardFallback
+              key={glbUrl}
+              fallback={procedural}
+              onError={onGlbFallback}
+            >
+              <Suspense fallback={procedural}>
+                <RealGlbBoard
+                  url={glbUrl}
+                  parts={parts}
+                  placed={placed}
+                  explode={explode}
+                  onHover={onHover}
+                  onRemovePart={onRemovePart}
+                />
+              </Suspense>
+            </GlbBoardFallback>
+          ) : (
+            procedural
+          )}
+          {/* 3D jumper wires + directional current flow (procedural bench view) */}
+          {viewMode === "parts" && showWires && (
+            <CircuitWireOverlay
+              spec={spec}
+              placed={placed}
+              powered={flow}
+              running={running}
+              blink={blink}
+              d9Energized={d9Energized}
+            />
+          )}
+          {/* Burn-out effects render for both the procedural scene and a loaded .glb */}
+          {burnPart && (
+            <FaultOverlay
+              key={`${spec.id}-${burnPart.id}-fault`}
+              part={burnPart}
+              coords={faultCoord}
+              explode={explode}
+            />
+          )}
+          {/* Missing / halted part locator: pulsing rings over the open pads
+              (halt + degraded faults — burnout uses the FaultOverlay above) */}
+          {eduFault && eduFault.severity !== "burnout" && faultCoord && (
+            <FaultLocator
+              key={`${spec.id}-${eduFault.partId}-locator`}
+              coords={faultCoord}
+              explode={explode}
+              tone={eduFault.severity === "degraded" ? "amber" : "red"}
+            />
+          )}
+        </TiltRig>
         {/* Sonar bench: reflector target block on the acoustic axis (+X) */}
         {spec.boardStyle === "hc-sr04" && targetDistance != null && (
           <ReflectorTarget distance={targetDistance} parts={parts} />

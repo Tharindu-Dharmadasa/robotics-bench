@@ -61,7 +61,7 @@ void loop() {
       errorMessage:
         "HALT: OLED VCC collapse — charge pump capacitors missing; 7.5V bias rail dead!",
       criticalPart: "oled_glass",
-      criticalParts: ["oled_glass", "c_pump", "r_sda"],
+      criticalParts: ["oled_glass", "cap_cpump1", "r_sda", "ldo_oled", "r_i2c_oled"],
     },
     parts: [
       {
@@ -78,7 +78,7 @@ void loop() {
         },
       },
       {
-        id: "c_pump",
+        id: "cap_cpump1",
         name: "1µF Charge Pump Flying Cap",
         kind: "cap",
         smd: true,
@@ -102,6 +102,33 @@ void loop() {
           severity: "degraded",
           message:
             "DISPLAY VOLTAGE RIPPLE: high internal ripple causes visible horizontal line flicker and pixel ghosting.",
+        },
+      },
+      {
+        id: "ldo_oled",
+        name: "662K 3.3V OLED LDO",
+        kind: "reg",
+        smd: true,
+        p: [-1.15, -0.2],
+        value: "3.3V",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "3.3V LOGIC RAIL DEAD: the 662K LDO drops out of regulation so the SSD1306 driver and its charge pump lose supply bias — the glass blanks instantly.",
+        },
+      },
+      {
+        id: "r_i2c_oled",
+        name: "4.7kΩ SDA Series Protection Resistor",
+        kind: "res",
+        smd: true,
+        p: [0, -0.6],
+        value: "4.7kΩ",
+        onRemoveEffect: {
+          severity: "burnout",
+          damagedPartId: "oled_glass",
+          message:
+            "SDA PROTECTION OPEN: the series resistor lifts out while powered and the I2C line floats into the 7.5V bias rail — the SSD1306 glass arcs, flashes and scorches.",
         },
       },
       {

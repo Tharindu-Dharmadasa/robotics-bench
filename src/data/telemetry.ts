@@ -7,6 +7,19 @@ export interface TelemetryState {
   values?: Record<string, string>;
   targetDistance?: number;
   d9High?: boolean;
+  /** Fig. 09 · IMU tilt-rig attitude in degrees (drives the accel model). */
+  imuTilt?: { pitch: number; roll: number };
+  /** Fig. 10 · KY-040 live detent count, last step direction, axial SW. */
+  encoderStep?: number;
+  encoderDir?: "CW" | "CCW";
+  encoderPressed?: boolean;
+  /** Fig. 10 · true when the 100nF CLK/DT debounce caps are not both placed. */
+  encoderJitter?: boolean;
+  /** Fig. 11 · PCA9685 servo angle (0–180°) → 1.0–2.0 ms pulse. */
+  pcaAngle?: number;
+  /** Fig. 13 · false once the HMC5883L magnetometer (mag_ic) is removed —
+   *  the complementary-filter yaw then drifts on uncalibrated gyro bias. */
+  fusionMagLocked?: boolean;
   [key: string]: unknown;
 }
 
@@ -93,38 +106,70 @@ export function getBoardTelemetryLine(
     }
 
     case 8: {
-      // Fig. 09: MPU-6050 IMU — 6-axis accel + gyro stream
-      const ax = (0.02 + ((tick % 3) - 1) * 0.01).toFixed(2);
-      const ay = (-0.01 + (((tick + 1) % 3) - 1) * 0.01).toFixed(2);
-      const az = (1.0 + (((tick + 2) % 3) - 1) * 0.01).toFixed(2);
-      const gx = (0.4 + ((tick % 5) - 2) * 0.1).toFixed(1);
-      const gy = (-0.2 + (((tick + 2) % 5) - 2) * 0.1).toFixed(1);
-      const gz = (0.1 + (((tick + 4) % 5) - 2) * 0.1).toFixed(1);
-      return `${ts} IMU 0x68 | Accel: [${ax}, ${ay}, ${az}g] | Gyro: [${gx}, ${gy}, ${gz} deg/s]`;
+      // Fig. 09: MPU-6050 IMU — bench tilt rig → board-frame gravity model.
+      // +pitch noses the board up about its lateral axis, +roll banks it
+      // about its long axis; the accelerometer reports gravity projected on
+      // the body axes:  ax = sin(pitch) · ay = −sin(roll) · az = cos·cos
+      const pitch = state.imuTilt?.pitch ?? 0;
+      const roll = state.imuTilt?.roll ?? 0;
+      const p = (pitch * Math.PI) / 180;
+      const r = (roll * Math.PI) / 180;
+      // ±4 mg MEMS noise floor so a level board still streams micro-jitter
+      const jitter = (i: number) => ((((tick * 7 + i * 3) % 5) - 2) * 0.004);
+      const ax = (Math.sin(p) + jitter(0)).toFixed(3);
+      const ay = (-Math.sin(r) + jitter(1)).toFixed(3);
+      const az = (Math.cos(p) * Math.cos(r) + jitter(2)).toFixed(3);
+      const fmtDeg = (v: number) =>
+        `${v >= 0 ? "+" : "-"}${Math.abs(v).toFixed(1)}°`;
+      return `${ts} IMU 0x68 | Accel: [${ax}, ${ay}, ${az}g] | Pitch: ${fmtDeg(pitch)} | Roll: ${fmtDeg(roll)}`;
     }
 
     case 9: {
-      // Fig. 10: Rotary encoder — quadrature count tracking
-      const count = ((tick * 2) % 48) - 12;
-      return `${ts} ENCODER: ${count} counts (Detent step, CLK/DT 90° quadrature)`;
+      // Fig. 10: KY-040 rotary encoder — live detent count + shaft switch
+      const step = state.encoderStep ?? 0;
+      const dir = state.encoderDir ?? (step >= 0 ? "CW" : "CCW");
+      const sw = state.encoderPressed ? "PRESSED" : "OPEN";
+      if (state.encoderJitter) {
+        // 100nF debounce cap unplaced: contact bounce fires 5–15 false
+        // interrupts per detent, so the streamed count jumps around the
+        // true shaft position.
+        const bounce = 5 + ((tick * 11) % 11); // 5–15 false triggers
+        const noisy = step + (((tick * 5) % 5) - 2); // ±2 counts of chatter
+        return `${ts} KY-040 Step: ${noisy} | Dir: ${dir} | SW: ${sw} | !! CHATTER ×${bounce} — debounce cap unplaced`;
+      }
+      return `${ts} KY-040 Step: ${step} | Dir: ${dir} | SW: ${sw}`;
     }
 
     case 10: {
-      // Fig. 11: PCA9685 servo driver — 16-channel 12-bit PWM sweep
-      const pulse = 205 + ((tick * 15) % 210);
-      return `${ts} PCA9685: Sweeping 16 channels @ 50Hz (Pulse=${pulse}/4096)`;
+      // Fig. 11: PCA9685 servo driver — live angle → 1.0–2.0 ms pulse on
+      // all 16 channels (50 Hz servo frame = 20 ms period)
+      const angle = state.pcaAngle ?? 90;
+      const pulseUs = Math.round(1000 + (angle / 180) * 1000);
+      const duty = ((pulseUs / 20000) * 100).toFixed(2);
+      return `${ts} PCA9685 [0x40] Ch0..15 PWM: ${pulseUs} µs (${angle}°) · ${duty}% duty @ 50Hz`;
     }
 
     case 11: {
-      // Fig. 12: I2C OLED display — frame rendering rate
-      return `${ts} OLED [0x3C]: 128x64 frame ${tick} rendered @ 30 FPS | VPP=7.5V`;
+      // Fig. 12: I2C OLED display — SSD1306 framebuffer scan @ 60 FPS
+      // (1024 B = 128×64/8, driven from the 7.5V charge-pump boost rail)
+      return `${ts} OLED [0x3C] Framebuffer 1024B @ 60FPS | V_boost = 7.5V`;
     }
 
     case 12: {
-      // Fig. 13: MPU-6050 Sensor Fusion — complementary filter attitude
-      const pitch = (14.0 + Math.sin(tick * 0.4) * 3.5).toFixed(1);
-      const accelRef = (14.2 + Math.cos(tick * 0.4) * 3.2).toFixed(1);
-      return `${ts} FUSION [dt=500ms]: Pitch=${pitch}° | AccelRef=${accelRef}° (98% Gyro + 2% Accel)`;
+      // Fig. 13: MPU-6050 + HMC5883L 9-axis sensor fusion — live
+      // complementary-filter quaternion stream. The magnetometer
+      // magnetically locks yaw; with the HMC5883L (mag_ic) removed the
+      // fused yaw diverges on uncalibrated gyro bias.
+      const fmtDeg = (v: number) =>
+        `${v >= 0 ? "+" : "-"}${Math.abs(v).toFixed(1)}°`;
+      const pitch = 1.2 + Math.sin(tick * 0.9) * 0.2;
+      const roll = -0.4 + Math.cos(tick * 0.7) * 0.15;
+      if (state.fusionMagLocked === false) {
+        const drift = (142.8 + tick * 4.7) % 360;
+        return `${ts} 9-DOF QUATERNION | Pitch: ${fmtDeg(pitch)} | Roll: ${fmtDeg(roll)} | Yaw (Drifting): ${drift.toFixed(1)}° !! MAG LOST — HMC5883L (mag_ic) removed`;
+      }
+      const yaw = 142.8 + Math.sin(tick * 0.25) * 0.8;
+      return `${ts} 9-DOF QUATERNION | Pitch: ${fmtDeg(pitch)} | Roll: ${fmtDeg(roll)} | Yaw (Mag-Locked): ${yaw.toFixed(1)}° N`;
     }
 
     default:

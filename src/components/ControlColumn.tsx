@@ -54,6 +54,16 @@ interface ControlColumnProps {
   onD9Toggle: (next: boolean) => void;
   /** Fig. 03 · fire the HIGH→LOW flyback burnout check (logic lives in App). */
   onTriggerBurnout: () => void;
+  /** Fig. 09–11 · bench instrument state + setters (lifted to App). */
+  imuTilt?: { pitch: number; roll: number };
+  onImuTiltChange?: (tilt: { pitch: number; roll: number }) => void;
+  onImuReset?: () => void;
+  encoderStep?: number;
+  encoderPressed?: boolean;
+  onEncoderRotate?: (dir: 1 | -1) => void;
+  onEncoderSetPressed?: (pressed: boolean) => void;
+  pcaAngle?: number;
+  onPcaAngleChange?: (deg: number) => void;
   /** 3D jumper-wire / current-flow overlay visibility. */
   showWires: boolean;
   onToggleWires: () => void;
@@ -92,6 +102,15 @@ export default function ControlColumn({
   d9High,
   onD9Toggle,
   onTriggerBurnout,
+  imuTilt,
+  onImuTiltChange,
+  onImuReset,
+  encoderStep,
+  encoderPressed,
+  onEncoderRotate,
+  onEncoderSetPressed,
+  pcaAngle,
+  onPcaAngleChange,
   showWires,
   onToggleWires,
   onInstrumentFault,
@@ -116,6 +135,15 @@ export default function ControlColumn({
         d9High={d9High}
         onD9Toggle={onD9Toggle}
         onTriggerBurnout={onTriggerBurnout}
+        imuTilt={imuTilt}
+        onImuTiltChange={onImuTiltChange}
+        onImuReset={onImuReset}
+        encoderStep={encoderStep}
+        encoderPressed={encoderPressed}
+        onEncoderRotate={onEncoderRotate}
+        onEncoderSetPressed={onEncoderSetPressed}
+        pcaAngle={pcaAngle}
+        onPcaAngleChange={onPcaAngleChange}
         onFault={onInstrumentFault}
         onLog={onInstrumentLog}
       />

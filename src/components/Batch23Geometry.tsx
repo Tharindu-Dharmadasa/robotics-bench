@@ -6,7 +6,10 @@
 //      solder pads, white component placement boxes and realistic pin‑out labels for
 //      all eight board styles.
 //   2. Realistic multi-part meshes for motorDriver (L298N), plus delegation:
-//      stepperDriver (A4988) → boards/Fig07A4988, servo (SG90) → boards/Fig08SG90.
+//      stepperDriver (A4988) → boards/Fig07A4988, servo (SG90) → boards/Fig08SG90,
+//      imu (MPU-6050) → boards/Fig09MPU6050, encoder (KY-040) → boards/Fig10Encoder,
+//      screw/servo headers (PCA9685) → boards/Fig11PCA9685,
+//      oled-module (SSD1306) → boards/Fig12Oled, fusion-purple → boards/Fig13Fusion.
 //   3. Exported symbols exactly matching what PartGeometry.tsx expects:
 //      BATCH23_KINDS, BATCH23_STYLES, Batch23PartGeo, Batch23PcbBase.
 //   4. No use of @react-three/drei <Html> or <Text> inside <Canvas>.
@@ -30,6 +33,31 @@ import {
   Fig08SG90Part,
   isFig08Part,
 } from "./boards/Fig08SG90";
+import {
+  Fig09MPU6050Pcb,
+  Fig09MPU6050Part,
+  isFig09Part,
+} from "./boards/Fig09MPU6050";
+import {
+  Fig10EncoderPcb,
+  Fig10EncoderPart,
+  isFig10Part,
+} from "./boards/Fig10Encoder";
+import {
+  Fig11PCA9685Pcb,
+  Fig11PCA9685Part,
+  isFig11Part,
+} from "./boards/Fig11PCA9685";
+import {
+  Fig12OledPcb,
+  Fig12OledPart,
+  isFig12Part,
+} from "./boards/Fig12Oled";
+import {
+  Fig13FusionPcb,
+  Fig13FusionPart,
+  isFig13Part,
+} from "./boards/Fig13Fusion";
 
 /* ------------------------------------------------------------------ */
 /*  Constants & Type Guards                                            */
@@ -101,10 +129,10 @@ export const BATCH23_STYLE_DIMS: Record<Batch23Style, [number, number]> = {
   "l298n-red": [4.4, 4.4],
   stepstick: [1.8, 2.4],
   "sg90-cutaway": [3.2, 1.4],
-  "breakout-blue": [2.2, 1.7],
+  "breakout-blue": [2.6, 2.0],
   "fusion-purple": [2.2, 1.7],
-  "ky040-dark": [2.7, 3.2],
-  "pca9685-blue": [6.4, 2.6],
+  "ky040-dark": [1.9, 3.1],
+  "pca9685-blue": [6.2, 2.6],
   "oled-module": [2.8, 2.8],
 };
 
@@ -365,11 +393,23 @@ export function Batch23PcbBase({
   const [w, d] = BATCH23_STYLE_DIMS[resolvedStyle] ?? [4.4, 4.4];
   const maskColor = color ?? BATCH23_STYLE_COLORS[resolvedStyle];
 
+  // Figs. 09–13 own their PCB geometry entirely; no generic silkscreen
+  // texture is needed for their delegated styles.
+  const isDelegated =
+    resolvedStyle === "breakout-blue" ||
+    resolvedStyle === "ky040-dark" ||
+    resolvedStyle === "pca9685-blue" ||
+    resolvedStyle === "oled-module" ||
+    resolvedStyle === "fusion-purple";
+
   const texture = useMemo(
-    () => createBoardSilkscreenTexture(resolvedStyle, maskColor),
-    [resolvedStyle, maskColor],
+    () =>
+      isDelegated
+        ? null
+        : createBoardSilkscreenTexture(resolvedStyle, maskColor),
+    [resolvedStyle, maskColor, isDelegated],
   );
-  useEffect(() => () => texture.dispose(), [texture]);
+  useEffect(() => () => texture?.dispose(), [texture]);
   useFrame(() => {
     if (ref.current) ref.current.position.y = -explode * 0.6;
   });
@@ -400,6 +440,51 @@ export function Batch23PcbBase({
     );
   }
 
+  // Fig. 09 – GY-521 / MPU-6050 IMU breakout PCB (2.6 × 2.0)
+  if (resolvedStyle === "breakout-blue") {
+    return (
+      <group ref={ref}>
+        <Fig09MPU6050Pcb color={maskColor} />
+      </group>
+    );
+  }
+
+  // Fig. 10 – KY-040 rotary encoder PCB (3.1 × 1.9, long axis along z)
+  if (resolvedStyle === "ky040-dark") {
+    return (
+      <group ref={ref}>
+        <Fig10EncoderPcb color={maskColor} />
+      </group>
+    );
+  }
+
+  // Fig. 11 – PCA9685 16-channel PWM servo PCB (6.2 × 2.6)
+  if (resolvedStyle === "pca9685-blue") {
+    return (
+      <group ref={ref}>
+        <Fig11PCA9685Pcb color={maskColor} />
+      </group>
+    );
+  }
+
+  // Fig. 12 – SSD1306 0.96" I2C OLED module PCB (2.8 × 2.8)
+  if (resolvedStyle === "oled-module") {
+    return (
+      <group ref={ref}>
+        <Fig12OledPcb color={maskColor} />
+      </group>
+    );
+  }
+
+  // Fig. 13 – MPU-6050 + HMC5883L 9-axis sensor fusion PCB (3.4 × 2.2)
+  if (resolvedStyle === "fusion-purple") {
+    return (
+      <group ref={ref}>
+        <Fig13FusionPcb color={maskColor} />
+      </group>
+    );
+  }
+
   return (
     <group ref={ref}>
       {/* PCB substrate */}
@@ -426,7 +511,7 @@ export function Batch23PcbBase({
       >
         <planeGeometry args={[w * 0.98, d * 0.98]} />
         <meshStandardMaterial
-          map={texture}
+          map={texture ?? undefined}
           roughness={0.4}
           metalness={0.12}
           transparent
@@ -434,8 +519,7 @@ export function Batch23PcbBase({
       </mesh>
 
       {/* Corner brass-plated standoffs / holes */}
-      {(resolvedStyle === "pca9685-blue" ||
-        resolvedStyle === "oled-module") && (
+      {resolvedStyle === "oled-module" && (
         <group>
           {[
             [-w / 2 + 0.35, -d / 2 + 0.35],
@@ -456,6 +540,75 @@ export function Batch23PcbBase({
       )}
     </group>
   );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Fault charring (Stage 2 of the 4-stage failure sequence)           */
+/* ------------------------------------------------------------------ */
+
+/** Charred-carbon finish the damaged part transitions to. */
+const CHAR_COLOR = new THREE.Color("#181414");
+/** Inner ember glow colour that fades as the husk cools. */
+const EMBER_COLOR = new THREE.Color("#ff3b00");
+
+/** Pristine material finish snapshotted into mesh.userData.origMaterial. */
+type OrigFinish = {
+  color: THREE.Color;
+  emissive: THREE.Color;
+  emissiveIntensity: number;
+  roughness: number;
+  metalness: number;
+};
+
+/** First material of a mesh (every part mesh here is single-material). */
+const firstMaterial = (mesh: THREE.Mesh) =>
+  (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as
+    | THREE.Material
+    | undefined;
+
+/**
+ * Snapshot every descendant MeshStandardMaterial's pristine finish into
+ * mesh.userData.origMaterial. Called once on first mount — BEFORE any burnout
+ * charring can mutate the materials — so Repair / Reset Fault / Strip to bare
+ * PCB can always restore the original look.
+ */
+function snapshotFinishes(root: THREE.Object3D | null) {
+  if (!root) return;
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || mesh.userData.origMaterial) return;
+    const m = firstMaterial(mesh);
+    if (m instanceof THREE.MeshStandardMaterial) {
+      const orig: OrigFinish = {
+        color: m.color.clone(),
+        emissive: m.emissive.clone(),
+        emissiveIntensity: m.emissiveIntensity,
+        roughness: m.roughness,
+        metalness: m.metalness,
+      };
+      mesh.userData.origMaterial = orig;
+    }
+  });
+}
+
+/**
+ * Copy every snapshotted pristine finish back onto its material — the
+ * damaged→undamaged transition that clears the burnout red tint.
+ */
+function restoreFinishes(root: THREE.Object3D | null) {
+  if (!root) return;
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const orig = mesh.userData.origMaterial as OrigFinish | undefined;
+    const m = firstMaterial(mesh);
+    if (!orig || !(m instanceof THREE.MeshStandardMaterial)) return;
+    m.color.copy(orig.color);
+    m.emissive.copy(orig.emissive);
+    m.emissiveIntensity = orig.emissiveIntensity;
+    m.roughness = orig.roughness;
+    m.metalness = orig.metalness;
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -685,42 +838,168 @@ function JumperAssembly() {
 export function Batch23PartGeo({
   part,
   lit,
+  charred = false,
+  damagedPartId,
+  faultPartId,
 }: {
   part: Part;
   lit: boolean;
+  /** Output-energy factor 0..1 (e.g. 10kΩ resistor => dim output). */
   energy?: number;
+  /** Stage 2 of the failure sequence: the part scorches to matte carbon. */
+  charred?: boolean;
+  /** Id of the part that caused/owns the active fault (this part when it burned). */
+  damagedPartId?: string;
+  /** [x, z] bench coordinates of that part (each sub-mesh already sits at its own p). */
+  faultPartId?: [number, number];
 }) {
+  // Only char the part that actually caused the fault: the damagedPartId or
+  // the fault-origin coords must match this part (charred alone would also
+  // come through true for the victim, which both confirm).
+  const burning =
+    charred &&
+    (!damagedPartId || damagedPartId === part.id) &&
+    (!faultPartId ||
+      (faultPartId[0] === part.p[0] && faultPartId[1] === part.p[1]));
+  const ref = useRef<THREE.Group>(null);
+  // charring state (pure refs — no per-frame state updates)
+  const wasDamaged = useRef(false);
+  const charT = useRef(0);
+  /** Materials being charred in useFrame (gathered once per burnout). */
+  const charMats = useRef<THREE.MeshStandardMaterial[] | null>(null);
+
+  // Snapshot the pristine finishes once, on first mount, into
+  // mesh.userData.origMaterial — the restore source for every later repair.
+  useEffect(() => {
+    snapshotFinishes(ref.current);
+  }, []);
+
+  // isDamaged (burning) true → false — Repair / Reset Fault / Strip to bare
+  // PCB: explicitly put the pristine finish back so no red burn tint survives.
+  useEffect(() => {
+    if (burning) {
+      wasDamaged.current = true;
+      return;
+    }
+    if (!wasDamaged.current) return;
+    wasDamaged.current = false;
+    charMats.current = null;
+    restoreFinishes(ref.current);
+  }, [burning]);
+
+  /* Stage 2 · dark charred material override + fading ember, driven purely in
+     useFrame so a burnout on Figs. 06–13 gets the same matte-carbon husk as
+     the Figs. 01–05 parts. On repair the original finish is restored from
+     mesh.userData.origMaterial by the effect above. */
+  useFrame((_, dt) => {
+    const g = ref.current;
+    if (!g) return;
+
+    if (burning) {
+      if (!charMats.current) {
+        const mats: THREE.MeshStandardMaterial[] = [];
+        g.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          const m = firstMaterial(mesh);
+          if (m instanceof THREE.MeshStandardMaterial) mats.push(m);
+        });
+        charMats.current = mats;
+      }
+      charT.current += dt;
+      const t = charT.current;
+      // fast scorch: lerp every finish toward matte carbon (~0.3s)
+      const kk = 1 - Math.exp(-dt * 9);
+      // ember glow decays over ~1.6s with a hot flicker, then dies out
+      const ember =
+        Math.max(0, 2.2 * Math.exp(-t * 1.6)) * (0.8 + Math.sin(t * 23) * 0.2);
+      charMats.current.forEach((m) => {
+        m.color.lerp(CHAR_COLOR, kk);
+        m.emissive.lerp(EMBER_COLOR, kk);
+        m.roughness += (1 - m.roughness) * kk;
+        m.metalness += (0.05 - m.metalness) * kk;
+        m.emissiveIntensity = ember;
+      });
+    }
+  });
+
   // Fig. 07 sub-parts — A4988 IC + heatsink, VREF trimpot, R100 sense
   // resistors, 100µF/100nF caps and the twin 8-pin male headers.
-  if (isFig07Part(part.id)) {
-    return <Fig07A4988Part part={part} lit={lit} />;
-  }
-
-  // Fig. 08 sub-parts — SG90 mechanism and 5kΩ feedback pot (the qfp/cap/
-  // hdr footprints keep their generic geometry, aligned via fig08.ts coords).
-  if (isFig08Part(part.id)) {
-    return <Fig08SG90Part part={part} lit={lit} />;
-  }
-
-  if (
-    part.kind === "motorDriver" ||
-    part.kind === "diode" ||
-    part.kind === "screw" ||
-    part.kind === "jumper"
-  ) {
-    return <Fig06L298NPart part={part} lit={lit} />;
-  }
-
-  switch (part.kind) {
-    case "stepperDriver":
+  const body = (() => {
+    if (isFig07Part(part.id)) {
       return <Fig07A4988Part part={part} lit={lit} />;
-    case "servo":
+    }
+
+    // Fig. 08 sub-parts — SG90 mechanism and 5kΩ feedback pot (the qfp/cap/
+    // hdr footprints keep their generic geometry, aligned via fig08.ts coords).
+    if (isFig08Part(part.id)) {
       return <Fig08SG90Part part={part} lit={lit} />;
-    case "oled":
-      return <OledAssembly lit={lit} />;
-    default:
-      return null;
-  }
+    }
+
+    // Fig. 09 sub-parts — MPU-6050 QFN-24, 662K SOT-23 LDO, 472 pull-ups,
+    // MLCC caps, green PWR LED and the 8-pin breakout header (aligned via
+    // fig09.ts coords).
+    if (isFig09Part(part.id)) {
+      return <Fig09MPU6050Part part={part} lit={lit} />;
+    }
+
+    // Fig. 10 sub-parts — EC11 encoder + D-shaft mechanism, 103 pull-ups,
+    // 100nF debounce caps, tactile switch and right-angle header (aligned
+    // via fig10.ts coords).
+    if (isFig10Part(part.id)) {
+      return <Fig10EncoderPart part={part} lit={lit} />;
+    }
+
+    // Fig. 11 sub-parts — PCA9685 TSSOP-28, 25MHz crystal, 1000µF bulk cap,
+    // green screw terminal, color-coded servo banks and the I2C cascade
+    // header (aligned via fig11.ts coords).
+    if (isFig11Part(part.id)) {
+      return <Fig11PCA9685Part part={part} lit={lit} />;
+    }
+
+    // Fig. 12 sub-parts — elevated SSD1306 128×64 glass bezel on its
+    // copper polyimide flex ribbon, 1µF charge-pump flying caps, 4.7kΩ
+    // pull-ups and the 4-pin I2C header (aligned via fig12.ts coords).
+    if (isFig12Part(part.id)) {
+      return <Fig12OledPart part={part} lit={lit} charred={burning} />;
+    }
+
+    // Fig. 13 sub-parts — MPU-6050 QFN, CAL button, 3.3V LDO, 4.7kΩ
+    // pull-ups, MLCC caps, lock LED and the 8-pin breakout header
+    // (aligned via fig13.ts coords).
+    if (isFig13Part(part.id)) {
+      return <Fig13FusionPart part={part} lit={lit} />;
+    }
+
+    if (
+      part.kind === "motorDriver" ||
+      part.kind === "diode" ||
+      part.kind === "screw" ||
+      part.kind === "jumper"
+    ) {
+      return <Fig06L298NPart part={part} lit={lit} />;
+    }
+
+    switch (part.kind) {
+      case "stepperDriver":
+        return <Fig07A4988Part part={part} lit={lit} />;
+      case "servo":
+        return <Fig08SG90Part part={part} lit={lit} />;
+      case "imu":
+        // Fig. 09 — MPU-6050 6-axis MEMS sensor assembly.
+        return <Fig09MPU6050Part part={part} lit={lit} />;
+      case "encoder":
+        // Fig. 10 — KY-040 EC11 quadrature encoder assembly.
+        return <Fig10EncoderPart part={part} lit={lit} />;
+      case "oled":
+        // Fig. 12 — elevated SSD1306 glass + charge-pump boost circuit.
+        return <Fig12OledPart part={part} lit={lit} charred={burning} />;
+      default:
+        return null;
+    }
+  })();
+
+  return <group ref={ref}>{body}</group>;
 }
 
 /* Export sub‑assemblies for external use if needed */

@@ -17,6 +17,8 @@ import Sidebar from "./components/Sidebar";
 import Viewport3D, { type EduFault } from "./components/Viewport3D";
 import { BOARD_SPECS } from "./data/boards";
 import { getBoardTelemetryLine } from "./data/telemetry";
+import { oledBench } from "./components/boards/Fig12Oled";
+import { fusionBench } from "./components/boards/Fig13Fusion";
 import type { BoardSpec, FaultRule, Part, PartEffect, SimStatus } from "./types/simulator";
 
 /**
@@ -36,6 +38,10 @@ const initialValues = (spec: BoardSpec) =>
   Object.fromEntries(
     spec.parts.filter((p) => p.value).map((p) => [p.id, p.value!]),
   );
+
+/** Serial-monitor tag for a PartEffect consequence (value-change path). */
+const effectTag = (severity: PartEffect["severity"]) =>
+  severity === "burnout" ? "BURNOUT" : severity === "halt" ? "HALT" : "WARN";
 
 export default function App() {
   const [board, setBoard] = useState(0);
@@ -65,6 +71,13 @@ export default function App() {
   const [targetDistance, setTargetDistance] = useState(25);
   /** Fig. 03 · lifted D9 pin state (true = 5 V base drive, relay closed). */
   const [d9High, setD9High] = useState(false);
+  /** Fig. 09 · IMU tilt-rig attitude in degrees (drives the 3D board tilt + accel telemetry). */
+  const [imuTilt, setImuTilt] = useState({ pitch: 0, roll: 0 });
+  /** Fig. 10 · KY-040 live detent count + axial SW press state. */
+  const [encoderStep, setEncoderStep] = useState(0);
+  const [encoderPressed, setEncoderPressed] = useState(false);
+  /** Fig. 11 · PCA9685 servo angle 0–180° (1.0–2.0 ms pulse on all 16 channels). */
+  const [pcaAngle, setPcaAngle] = useState(90);
   /** 3D jumper-wire + current-flow overlay toggle (ControlColumn switch). */
   const [showWires, setShowWires] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
@@ -75,11 +88,45 @@ export default function App() {
   targetDistanceRef.current = targetDistance;
   const d9HighRef = useRef(d9High);
   d9HighRef.current = d9High;
+  // live mirrors of the Fig. 09–11 instrument state for the telemetry interval
+  const imuTiltRef = useRef(imuTilt);
+  imuTiltRef.current = imuTilt;
+  const encoderStepRef = useRef(encoderStep);
+  encoderStepRef.current = encoderStep;
+  const encoderPressedRef = useRef(encoderPressed);
+  encoderPressedRef.current = encoderPressed;
+  const pcaAngleRef = useRef(pcaAngle);
+  pcaAngleRef.current = pcaAngle;
+  // live mirror of the placed set for the telemetry interval (no restarts)
+  const placedRef = useRef(placed);
+  placedRef.current = placed;
+  // Fig. 10 · last detent direction (from the CW/CCW buttons) for the stream
+  const encoderDirRef = useRef<"CW" | "CCW">("CW");
+  // Fig. 10 · both 100nF CLK/DT debounce caps placed → clean counts, otherwise chatter
+  const encoderDebounceOkRef = useRef(true);
+  encoderDebounceOkRef.current =
+    placed.has("c_clk") && placed.has("c_dt");
 
   const activeBoard = BOARD_SPECS[board];
   const parts = activeBoard.parts;
   const total = parts.length;
   const criticalParts = activeBoard.faultRule?.criticalParts ?? [];
+
+  /**
+   * The part that caused / owns the active fault: for burnout it is the
+   * damaged victim (effect.damagedPartId ?? the culprit), otherwise the part
+   * the learner interacted with. Its id + [x, z] coords anchor the 3D
+   * burnout visuals and missing-part locator rings.
+   */
+  const faultPart = fault
+    ? parts.find(
+        (p) =>
+          p.id ===
+          (fault.severity === "burnout"
+            ? (fault.burnPartId ?? fault.partId)
+            : fault.partId),
+      )
+    : undefined;
 
   const log = (s: string) => setLogs((l) => [...l.slice(-80), s]);
   const count = placed.size;
@@ -113,6 +160,11 @@ export default function App() {
     setHover(null);
     setD9High(false);
     setTargetDistance(25);
+    setImuTilt({ pitch: 0, roll: 0 });
+    setEncoderStep(0);
+    setEncoderPressed(false);
+    setPcaAngle(90);
+    encoderDirRef.current = "CW";
     setValues(initialValues(spec));
     setLogs([
       `> Fig. ${String(index + 1).padStart(2, "0")} — ${spec.name} loaded. Place the remaining parts.`,
@@ -157,8 +209,9 @@ export default function App() {
       setBlink(false);
       return;
     }
-    // values, targetDistance, and d9 are read through refs inside the tick, so
-    // live slider adjustments mid-run update the next telemetry line immediately.
+    // values, targetDistance, d9 and the Fig. 09–11 instrument state are read
+    // through refs inside the tick, so live slider adjustments mid-run update
+    // the next telemetry line immediately.
     let on = false;
     let ms = 0;
     let tick = 0;
@@ -176,6 +229,14 @@ export default function App() {
           values: valuesRef.current,
           targetDistance: targetDistanceRef.current,
           d9High: d9HighRef.current,
+          imuTilt: imuTiltRef.current,
+          encoderStep: encoderStepRef.current,
+          encoderDir: encoderDirRef.current,
+          encoderPressed: encoderPressedRef.current,
+          encoderJitter: !encoderDebounceOkRef.current,
+          pcaAngle: pcaAngleRef.current,
+          // Fig. 13 · mag_ic removed → the fused yaw line starts drifting
+          fusionMagLocked: placedRef.current.has("mag_ic"),
         }),
       );
     }, 500);
@@ -185,6 +246,20 @@ export default function App() {
   useEffect(() => {
     logRef.current?.scrollTo(0, logRef.current.scrollHeight);
   }, [logs]);
+
+  // Fig. 12/13 · publish open-pad locator + magnetometer lock state onto
+  // the board-module bench buses (same cross-component pattern as the
+  // KY-040's ky040Shaft and the PCA9685's pca9685Pwm): the PCBs pulse
+  // red/amber fault rings on the empty pads of removed parts, and the
+  // Fig. 13 yaw compass drifts once the HMC5883L is lifted.
+  useEffect(() => {
+    const missing = new Set(
+      parts.filter((p) => !placed.has(p.id)).map((p) => p.id),
+    );
+    oledBench.missing = missing;
+    fusionBench.missing = missing;
+    fusionBench.magOk = placed.has("mag_ic");
+  }, [placed, parts]);
 
   const stopIfBroken = () => {
     if (running) {
@@ -220,7 +295,7 @@ export default function App() {
   const raiseEffect = (
     part: Part,
     eff: PartEffect,
-    opts: { keepRunning?: boolean } = {},
+    opts: { keepRunning?: boolean; tag?: string } = {},
   ) => {
     // A degraded consequence (e.g. 10kΩ starved LED) keeps the sketch running
     // — the board still works, just badly; burnout/halt shut it down.
@@ -229,9 +304,16 @@ export default function App() {
       setRunning(false);
       setBlink(false);
     }
+    // Physical burnout lands on the named victim while it is still placed;
+    // otherwise the culprit's own (possibly now-empty) PCB pad scorches.
+    const named = eff.damagedPartId
+      ? parts.find((p) => p.id === eff.damagedPartId)
+      : undefined;
     const burnId =
       eff.severity === "burnout"
-        ? (eff.damagedPartId ?? part.id)
+        ? named && placed.has(named.id)
+          ? named.id
+          : part.id
         : eff.damagedPartId;
     const burn = parts.find((p) => p.id === burnId);
     setFault({
@@ -241,7 +323,7 @@ export default function App() {
       message: eff.message,
       burnPartId: burnId,
     });
-    log(`! ERROR: ${eff.message}`);
+    log(`! ${opts.tag ?? "ERROR"}: ${eff.message}`);
   };
 
   /** Change a part's configured value (e.g. 1kΩ → 10Ω) from the parts list. */
@@ -251,10 +333,31 @@ export default function App() {
     setValues((v) => ({ ...v, [id]: opt }));
     log(`> ${part.name} set to ${opt}.`);
     const eff = part.valueEffects?.[opt];
-    if (!eff) return;
-    if (usb && soldered && placed.has(id) && !fault)
-      raiseEffect(part, eff, { keepRunning: true });
-    else
+    if (!eff) {
+      // Value auto-recovery: dialling back to a nominal value clears any fault
+      // this part raised, so the banner/burn damage/locator ring all reset.
+      if (fault && (fault.partId === id || fault.burnPartId === id)) {
+        setFault(null);
+        log("> Fault cleared — value back to nominal, board ready.");
+      }
+      return;
+    }
+    // Live valueEffects evaluation: on a powered or running board the
+    // consequence fires the instant the new value is dialled in —
+    //   burnout  → damaged part dies, status FAULT, sketch stops
+    //   halt     → sketch halts with a fault banner
+    //   degraded → keeps running under a warning banner
+    const boardPowered =
+      usb &&
+      soldered &&
+      count === total &&
+      (!fault || fault.severity === "degraded");
+    if ((boardPowered || running) && placed.has(id)) {
+      raiseEffect(part, eff, {
+        keepRunning: true,
+        tag: effectTag(eff.severity),
+      });
+    } else
       log(
         `> Power the assembled board to see what ${opt} does to this circuit.`,
       );
@@ -340,6 +443,43 @@ export default function App() {
     log(`! ${msg}`);
   };
 
+  /* ---------- Fig. 09 · IMU tilt rig · Fig. 10 · KY-040 · Fig. 11 · PCA9685 ---------- */
+
+  /** Tilt-rig sliders (±45°): the 500 ms stream carries the live values. */
+  const imuTiltChange = (tilt: { pitch: number; roll: number }) =>
+    setImuTilt(tilt);
+
+  /** Re-level the GY-521 rig (accel returns to [0, 0, +1g]). */
+  const imuResetLevel = () => {
+    setImuTilt({ pitch: 0, roll: 0 });
+    log("> MPU-6050 tilt rig zeroed — board level (0.0°, 0.0°).");
+  };
+
+  /** KY-040 detent step from the ⟲/⟳ buttons (one detent = π/10 shaft rad). */
+  const encoderRotate = (dir: 1 | -1) => {
+    const next = encoderStep + dir;
+    encoderDirRef.current = dir === 1 ? "CW" : "CCW";
+    setEncoderStep(next);
+    log(`> KY-040 detent ${dir === 1 ? "CW ⟳" : "CCW ⟲"} → step ${next}.`);
+  };
+
+  /**
+   * KY-040 axial SW (active-LOW, momentary): pressing grounds SW and the
+   * sketch zeroes the count — same as the board's real firmware loop.
+   */
+  const encoderSetPressed = (pressed: boolean) => {
+    setEncoderPressed(pressed);
+    if (pressed) {
+      setEncoderStep(0);
+      log("> KY-040 SW pressed (active-LOW) — encoder count zeroed.");
+    } else {
+      log("> KY-040 SW released (pull-up HIGH).");
+    }
+  };
+
+  /** PCA9685 servo angle slider (0–180°) → 1.0–2.0 ms pulse, all 16 channels. */
+  const pcaAngleChange = (deg: number) => setPcaAngle(deg);
+
   /** Quick-fix from the HUD fault banner (and the Repair bench action). */
   const repairFault = () => {
     if (!fault) return log("> No active fault to repair.");
@@ -383,7 +523,16 @@ export default function App() {
       setSoldered(false);
       log(`> Removed ${part.name}.`);
       if (wasPowered) {
-        if (part.onRemoveEffect) return raiseEffect(part, part.onRemoveEffect);
+        if (part.onRemoveEffect) {
+          // burnout  → victim (or the empty pad) scorches, status FAULT, stop
+          // halt     → open circuit, status FAULT, everything goes dark
+          // degraded → sketch keeps running under an amber warning banner
+          raiseEffect(part, part.onRemoveEffect, {
+            keepRunning: true,
+            tag: effectTag(part.onRemoveEffect.severity),
+          });
+          return;
+        }
         if (rule && rule.criticalParts?.includes(id)) return triggerFault(rule);
         stopIfBroken();
         setFault({
@@ -397,6 +546,12 @@ export default function App() {
       setPlaced((s) => new Set([...s, id]));
       if (!part.smd) setSoldered(false);
       log(`> Placed ${part.name}.`);
+      // Re-place auto-recovery: putting the faulted part back clears the fault
+      // state (banner, burn damage, locator ring) so the board runs clean again.
+      if (fault && (fault.partId === id || fault.burnPartId === id)) {
+        setFault(null);
+        log("> Fault cleared — part restored, board ready.");
+      }
     }
   };
 
@@ -480,6 +635,23 @@ export default function App() {
         if (count < total) {
           const missing = parts.filter((p) => !placed.has(p.id));
           log(`! Missing ${total - count} parts.`);
+          // A missing part that carries a removal consequence faults the
+          // power-on exactly as if it had been pulled while powered (e.g. a
+          // missing flyback diode destroys the transistor as current flows).
+          const effectful = missing.find((p) => p.onRemoveEffect);
+          if (effectful && effectful.onRemoveEffect) {
+            const eff = effectful.onRemoveEffect;
+            const keep = eff.severity === "degraded";
+            raiseEffect(effectful, eff, {
+              keepRunning: true,
+              tag: effectTag(eff.severity),
+            });
+            if (keep) {
+              log(`> avrdude: uploading ${activeBoard.name} sketch ... done.`);
+              setRunning(true);
+            }
+            return;
+          }
           setFault({
             partId: missing[0].id,
             partName: missing[0].name,
@@ -502,7 +674,10 @@ export default function App() {
           const cur = values[unsafe.id] ?? unsafe.value!;
           const eff = unsafe.valueEffects![cur];
           const keep = eff.severity === "degraded";
-          raiseEffect(unsafe, eff, { keepRunning: true });
+          raiseEffect(unsafe, eff, {
+            keepRunning: true,
+            tag: effectTag(eff.severity),
+          });
           if (keep) {
             log(`> avrdude: uploading ${activeBoard.name} sketch ... done.`);
             setRunning(true);
@@ -534,8 +709,20 @@ export default function App() {
   const litMap = (id: string) => {
     const part = parts.find((p) => p.id === id);
     if (!part) return false;
-    if (part.kind === "servo" || part.kind === "oled")
+    if (part.kind === "servo") return powered && running;
+    if (part.kind === "oled") {
+      // Fig. 12: the SSD1306 glass is emissive while the sketch runs AND
+      // the 1µF charge-pump boost caps + 662K 3.3V LDO are seated — pull
+      // either one and the 7.5V bias rail dies, blanking the screen.
+      if (activeBoard.id === 11)
+        return (
+          powered &&
+          running &&
+          placed.has("cap_cpump1") &&
+          placed.has("ldo_oled")
+        );
       return powered && running;
+    }
     if (!powered) return false;
     // board-specific lit targets (all behind the `powered` gate, so a removed
     // part or active fault kills every animation at once)
@@ -550,6 +737,14 @@ export default function App() {
         return id === "rgb" && running;
       case 5: // Fig. 05: the T transducer emits ping rings while running
         return id === "tx1" && running;
+      case 12: {
+        // Fig. 13: both MEMS QFNs (MPU-6050 DMP IMU + HMC5883L magnetometer)
+        // stream with the sketch; the fusion-lock LED holds solid only while
+        // the magnetometer keeps the yaw magnetically locked.
+        if (part.kind === "imu") return running;
+        if (id === "led_lock") return running && placed.has("mag_ic");
+        return false;
+      }
       default:
         // Fig. 01: Uno onboard LEDs
         if (id === "ledon") return true;
@@ -595,6 +790,15 @@ export default function App() {
             d9High={d9High}
             onD9Toggle={d9Toggle}
             onTriggerBurnout={d9TriggerBurnout}
+            imuTilt={imuTilt}
+            onImuTiltChange={imuTiltChange}
+            onImuReset={imuResetLevel}
+            encoderStep={encoderStep}
+            encoderPressed={encoderPressed}
+            onEncoderRotate={encoderRotate}
+            onEncoderSetPressed={encoderSetPressed}
+            pcaAngle={pcaAngle}
+            onPcaAngleChange={pcaAngleChange}
             showWires={showWires}
             onToggleWires={() => setShowWires((w) => !w)}
             onInstrumentFault={raiseInstrumentFault}
@@ -617,9 +821,15 @@ export default function App() {
             blink={blink}
             values={values}
             eduFault={fault}
+            damagedPartId={faultPart?.id}
+            faultPartId={faultPart?.p}
             viewMode={viewMode}
             showWires={showWires}
             d9Energized={d9Energized}
+            imuTilt={imuTilt}
+            encoderStep={encoderStep}
+            encoderPressed={encoderPressed}
+            pcaAngle={pcaAngle}
             onRemovePart={togglePart}
             onRepair={repairFault}
             hover={hover}

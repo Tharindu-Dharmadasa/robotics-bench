@@ -67,7 +67,7 @@ void loop() {
       errorMessage:
         "BURNOUT: Gyro bias runaway — sensor fusion filter diverged into saturation!",
       criticalPart: "mpu_ic",
-      criticalParts: ["mpu_ic", "btn_cal", "r_sda"],
+      criticalParts: ["mpu_ic", "btn_cal", "r_sda", "r_aux_pull", "ldo_fusion"],
     },
     parts: [
       {
@@ -81,6 +81,19 @@ void loop() {
           severity: "halt",
           message:
             "MEMS SENSOR MISSING: no inertial sensor available to supply accelerometer or angular rate inputs.",
+        },
+      },
+      {
+        id: "mag_ic",
+        name: "HMC5883L 3-Axis Magnetometer",
+        kind: "imu",
+        smd: true,
+        p: [1.15, 0],
+        label: "L883",
+        onRemoveEffect: {
+          severity: "degraded",
+          message:
+            "MAGNETIC LOCK LOST: without the HMC5883L the complementary filter has no absolute heading reference — the fused yaw drifts +1.8°/s on uncalibrated gyro bias (amber warning).",
         },
       },
       {
@@ -98,7 +111,7 @@ void loop() {
         },
       },
       {
-        id: "ldo_3v3",
+        id: "ldo_fusion",
         name: "3.3V Low-Dropout Regulator",
         kind: "reg",
         smd: true,
@@ -134,6 +147,19 @@ void loop() {
           severity: "halt",
           message:
             "I2C SCL OPEN: clock line cannot toggle; I2C state machine hangs.",
+        },
+      },
+      {
+        id: "r_aux_pull",
+        name: "4.7kΩ AUX I2C Pull-Up Resistor",
+        kind: "res",
+        smd: true,
+        p: [0.85, -0.35],
+        value: "4.7kΩ",
+        onRemoveEffect: {
+          severity: "halt",
+          message:
+            "AUX I2C OPEN: the XDA/XCL pull-up floats the magnetometer bus — sensor fusion halts and every activity indicator freezes.",
         },
       },
       {
