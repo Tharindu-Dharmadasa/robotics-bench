@@ -58,7 +58,7 @@ void loop() {
         name: "A4988 Driver + Heatsink",
         kind: "stepperDriver",
         smd: true,
-        p: [0, -0.1],
+        p: [0, 0],
         label: "A4988",
         onRemoveEffect: {
           severity: "halt",
@@ -71,7 +71,7 @@ void loop() {
         name: "VREF Current Trimpot",
         kind: "encoder",
         smd: true,
-        p: [0.55, 0.55],
+        p: [0.45, 0.95],
         value: "0.60V (1.2A Safe)",
         valueOptions: [
           "0.60V (1.2A Safe)",
@@ -103,7 +103,7 @@ void loop() {
         name: "0.1Ω Sense Resistor A",
         kind: "res",
         smd: true,
-        p: [-0.55, -0.45],
+        p: [-0.5, -0.55],
         value: "0.1Ω (R100)",
         onRemoveEffect: {
           severity: "burnout",
@@ -117,7 +117,7 @@ void loop() {
         name: "0.1Ω Sense Resistor B",
         kind: "res",
         smd: true,
-        p: [-0.55, 0.35],
+        p: [-0.5, 0.55],
         value: "0.1Ω (R100)",
         onRemoveEffect: {
           severity: "burnout",
@@ -132,7 +132,7 @@ void loop() {
         name: "100µF VMOT Decoupling Cap",
         kind: "ecap",
         smd: false,
-        p: [-0.85, 0.75],
+        p: [-0.42, -0.95],
         value: "100µF",
         onRemoveEffect: {
           severity: "burnout",
@@ -146,7 +146,7 @@ void loop() {
         name: "100nF Logic Bypass Cap",
         kind: "cap",
         smd: true,
-        p: [0.55, -0.55],
+        p: [0.5, -0.65],
         value: "100nF",
         onRemoveEffect: {
           severity: "degraded",
@@ -159,7 +159,7 @@ void loop() {
         name: "8-Pin Logic Header (EN..DIR)",
         kind: "hdr",
         smd: false,
-        p: [-0.95, 0],
+        p: [-0.7, 0],
         n: 8,
         rot: Math.PI / 2,
         onRemoveEffect: {
@@ -173,7 +173,7 @@ void loop() {
         name: "8-Pin Motor Header (VMOT..GND)",
         kind: "hdr",
         smd: false,
-        p: [0.95, 0],
+        p: [0.7, 0],
         n: 8,
         rot: Math.PI / 2,
         onRemoveEffect: {

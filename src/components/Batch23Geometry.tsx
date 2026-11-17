@@ -5,8 +5,8 @@
 //      THREE.CanvasTexture containing etched copper trace lines, ENIG gold
 //      solder pads, white component placement boxes and realistic pin‑out labels for
 //      all eight board styles.
-//   2. Realistic multi‑part meshes for motorDriver (L298N), stepperDriver (A4988),
-//      servo (SG90), oled (SSD1306), screw terminals and jumpers.
+//   2. Realistic multi-part meshes for motorDriver (L298N), plus delegation:
+//      stepperDriver (A4988) → boards/Fig07A4988, servo (SG90) → boards/Fig08SG90.
 //   3. Exported symbols exactly matching what PartGeometry.tsx expects:
 //      BATCH23_KINDS, BATCH23_STYLES, Batch23PartGeo, Batch23PcbBase.
 //   4. No use of @react-three/drei <Html> or <Text> inside <Canvas>.
@@ -20,6 +20,16 @@ import * as THREE from "three";
 import type { Part } from "../types/simulator";
 
 import { Fig06L298NPcb, Fig06L298NPart } from "./boards/Fig06L298N";
+import {
+  Fig07A4988Pcb,
+  Fig07A4988Part,
+  isFig07Part,
+} from "./boards/Fig07A4988";
+import {
+  Fig08SG90Base,
+  Fig08SG90Part,
+  isFig08Part,
+} from "./boards/Fig08SG90";
 
 /* ------------------------------------------------------------------ */
 /*  Constants & Type Guards                                            */
@@ -89,7 +99,7 @@ export function isBatch23Style(nameOrStyle?: string): boolean {
 
 export const BATCH23_STYLE_DIMS: Record<Batch23Style, [number, number]> = {
   "l298n-red": [4.4, 4.4],
-  stepstick: [1.7, 2.2],
+  stepstick: [1.8, 2.4],
   "sg90-cutaway": [3.2, 1.4],
   "breakout-blue": [2.2, 1.7],
   "fusion-purple": [2.2, 1.7],
@@ -372,6 +382,24 @@ export function Batch23PcbBase({
     );
   }
 
+  // Fig. 07 – Pololu A4988 StepStick PCB
+  if (resolvedStyle === "stepstick") {
+    return (
+      <group ref={ref}>
+        <Fig07A4988Pcb color={maskColor} />
+      </group>
+    );
+  }
+
+  // Fig. 08 – SG90 acrylic test jig base
+  if (resolvedStyle === "sg90-cutaway") {
+    return (
+      <group ref={ref}>
+        <Fig08SG90Base color={maskColor} />
+      </group>
+    );
+  }
+
   return (
     <group ref={ref}>
       {/* PCB substrate */}
@@ -555,170 +583,6 @@ function L298NAssembly() {
   );
 }
 
-/** A4988 StepStick – black QFN‑28 plus anodized‑blue finned heatsink */
-function StepStickAssembly() {
-  return (
-    <group>
-      {/* QFN‑28 driver IC */}
-      <mesh position={[0, 0.04, 0]} castShadow>
-        <boxGeometry args={[0.55, 0.08, 0.55]} />
-        <meshStandardMaterial color="#161617" roughness={0.4} metalness={0.1} />
-      </mesh>
-
-      {/* Blue anodized stick‑on heatsink */}
-      <group position={[0, 0.24, 0]}>
-        <mesh castShadow>
-          <boxGeometry args={[0.9, 0.12, 0.9]} />
-          <meshStandardMaterial
-            color="#1976d2"
-            metalness={0.88}
-            roughness={0.28}
-          />
-        </mesh>
-        {/* Five cooling fins */}
-        {[-0.34, -0.17, 0, 0.17, 0.34].map((z, i) => (
-          <mesh key={i} position={[0, 0.2, z]} castShadow>
-            <boxGeometry args={[0.88, 0.3, 0.06]} />
-            <meshStandardMaterial
-              color="#1976d2"
-              metalness={0.88}
-              roughness={0.28}
-            />
-          </mesh>
-        ))}
-      </group>
-
-      {/* VREF trimpot */}
-      <group position={[0.45, 0.08, 0.55]}>
-        <mesh castShadow>
-          <cylinderGeometry args={[0.15, 0.15, 0.1, 16]} />
-          <meshStandardMaterial
-            color="#c9cbcf"
-            metalness={0.92}
-            roughness={0.25}
-          />
-        </mesh>
-        {/* Slot cuts */}
-        <mesh position={[0, 0.052, 0]}>
-          <boxGeometry args={[0.2, 0.02, 0.04]} />
-          <meshStandardMaterial color="#444" />
-        </mesh>
-        <mesh position={[0, 0.052, 0]}>
-          <boxGeometry args={[0.04, 0.02, 0.2]} />
-          <meshStandardMaterial color="#444" />
-        </mesh>
-      </group>
-
-      {/* Current‑sense resistors (R100) */}
-      {[-0.38, 0.38].map((x, i) => (
-        <mesh key={i} position={[x, 0.04, -0.65]}>
-          <boxGeometry args={[0.24, 0.06, 0.14]} />
-          <meshStandardMaterial color="#2a5f32" roughness={0.5} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-/** SG90 cut‑away servo – clear blue housing, brushed motor, 4 white gears, pot, sweeping horn */
-function Sg90ServoAssembly({ lit }: { lit: boolean }) {
-  const hornRef = useRef<THREE.Group>(null);
-  useFrame((state) => {
-    if (!hornRef.current) return;
-    hornRef.current.rotation.y = lit
-      ? Math.sin(state.clock.getElapsedTime() * 3.2) * (Math.PI / 3)
-      : 0;
-  });
-
-  return (
-    <group>
-      {/* Polycarbonate housing */}
-      <mesh position={[0, 0.45, 0]} castShadow>
-        <boxGeometry args={[0.78, 0.9, 1.45]} />
-        <meshPhysicalMaterial
-          color="#1664c0"
-          roughness={0.22}
-          metalness={0.08}
-          transmission={0.65}
-          opacity={0.8}
-          transparent
-          ior={1.48}
-        />
-      </mesh>
-
-      {/* Brushed DC motor core
-       */}
-      <group position={[0, 0.32, -0.3]}>
-        <mesh castShadow>
-          <cylinderGeometry args={[0.22, 0.22, 0.65, 16]} />
-          <meshStandardMaterial
-            color="#d8dbde"
-            metalness={0.94}
-            roughness={0.22}
-          />
-        </mesh>
-        {/* Brass pinion gear */}
-        <mesh position={[0, 0.38, 0]}>
-          <cylinderGeometry args={[0.08, 0.08, 0.12, 12]} />
-          <meshStandardMaterial
-            color="#d4af37"
-            metalness={0.9}
-            roughness={0.25}
-          />
-        </mesh>
-      </group>
-
-      {/* Gear train – 4 white spur gears */}
-      <group position={[0, 0.62, 0.25]}>
-        {/* Stage 1 */}
-        <mesh position={[0, -0.15, -0.18]}>
-          <cylinderGeometry args={[0.18, 0.18, 0.08, 16]} />
-          <meshStandardMaterial color="#f2f2ee" roughness={0.4} />
-        </mesh>
-        {/* Stage 2 compound */}
-        <mesh position={[0, -0.05, 0]}>
-          <cylinderGeometry args={[0.24, 0.24, 0.1, 16]} />
-          <meshStandardMaterial color="#f2f2ee" roughness={0.4} />
-        </mesh>
-        {/* Output brass‑splined shaft */}
-        <mesh position={[0, 0.32, 0]} castShadow>
-          <cylinderGeometry args={[0.1, 0.1, 0.22, 16]} />
-          <meshStandardMaterial
-            color="#d4af37"
-            metalness={0.9}
-            roughness={0.25}
-          />
-        </mesh>
-      </group>
-
-      {/* Sweeping horn */}
-      <group ref={hornRef} position={[0, 0.98, 0.25]}>
-        <mesh castShadow>
-          <cylinderGeometry args={[0.18, 0.18, 0.08, 16]} />
-          <meshStandardMaterial color="#f8f8f6" roughness={0.35} />
-        </mesh>
-        <mesh position={[0, 0.045, 0]}>
-          <cylinderGeometry args={[0.06, 0.06, 0.03, 12]} />
-          <meshStandardMaterial color="#444" metalness={0.8} />
-        </mesh>
-        {[-1, 1].map((dir) => (
-          <group key={dir}>
-            <mesh position={[dir * 0.45, 0, 0]} castShadow>
-              <boxGeometry args={[0.7, 0.06, 0.18]} />
-              <meshStandardMaterial color="#f8f8f6" roughness={0.35} />
-            </mesh>
-            {[0.25, 0.45, 0.65].map((dist, k) => (
-              <mesh key={k} position={[dir * dist, 0.032, 0]}>
-                <cylinderGeometry args={[0.025, 0.025, 0.02, 8]} />
-                <meshStandardMaterial color="#111" />
-              </mesh>
-            ))}
-          </group>
-        ))}
-      </group>
-    </group>
-  );
-}
 
 /** SSD1306 0.96" OLED – glossy black bezel, copper flex ribbon, cyan emissive texture when lit */
 function OledAssembly({ lit }: { lit: boolean }) {
@@ -826,6 +690,18 @@ export function Batch23PartGeo({
   lit: boolean;
   energy?: number;
 }) {
+  // Fig. 07 sub-parts — A4988 IC + heatsink, VREF trimpot, R100 sense
+  // resistors, 100µF/100nF caps and the twin 8-pin male headers.
+  if (isFig07Part(part.id)) {
+    return <Fig07A4988Part part={part} lit={lit} />;
+  }
+
+  // Fig. 08 sub-parts — SG90 mechanism and 5kΩ feedback pot (the qfp/cap/
+  // hdr footprints keep their generic geometry, aligned via fig08.ts coords).
+  if (isFig08Part(part.id)) {
+    return <Fig08SG90Part part={part} lit={lit} />;
+  }
+
   if (
     part.kind === "motorDriver" ||
     part.kind === "diode" ||
@@ -837,9 +713,9 @@ export function Batch23PartGeo({
 
   switch (part.kind) {
     case "stepperDriver":
-      return <StepStickAssembly />;
+      return <Fig07A4988Part part={part} lit={lit} />;
     case "servo":
-      return <Sg90ServoAssembly lit={lit} />;
+      return <Fig08SG90Part part={part} lit={lit} />;
     case "oled":
       return <OledAssembly lit={lit} />;
     default:
@@ -850,8 +726,6 @@ export function Batch23PartGeo({
 /* Export sub‑assemblies for external use if needed */
 export {
   L298NAssembly,
-  StepStickAssembly,
-  Sg90ServoAssembly,
   OledAssembly,
   ScrewAssembly,
   JumperAssembly,

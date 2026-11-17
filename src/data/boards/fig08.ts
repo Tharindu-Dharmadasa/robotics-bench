@@ -68,7 +68,7 @@ delay(700);
         name: "KC5188 Servo Control IC",
         kind: "qfp",
         smd: true,
-        p: [-0.9, 0.45],
+        p: [-0.25, 0.3],
         label: "KC5188",
         onRemoveEffect: {
           severity: "halt",
@@ -81,7 +81,7 @@ delay(700);
         name: "5kΩ Position Feedback Pot",
         kind: "encoder",
         smd: false,
-        p: [0.85, 0.35],
+        p: [0, 0],
         value: "5kΩ",
         onRemoveEffect: {
           severity: "burnout",
@@ -95,7 +95,7 @@ delay(700);
         name: "100nF Brush Noise Cap",
         kind: "cap",
         smd: true,
-        p: [-0.45, -0.55],
+        p: [-0.3, -0.42],
         value: "100nF",
         onRemoveEffect: {
           severity: "degraded",
