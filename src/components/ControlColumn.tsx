@@ -307,16 +307,22 @@ export default function ControlColumn({
       >
         {labels ? "On" : "Off"}
       </button>
-      <div className="mt-3 text-[10px] tracking-widest text-[#666]">
-        3D WIRES
-      </div>
-      <button
-        onClick={onToggleWires}
-        title="Show arched 3D jumper wires + directional current arrows"
-        className={`w-16 rounded-full border border-[#222] px-3 py-1 text-xs ${showWires ? "bg-[#222] text-[#EAE6DF]" : ""}`}
-      >
-        {showWires ? "On" : "Off"}
-      </button>
+      {/* 3D jumper wires exist only on Fig. 02 & Fig. 03 (matches the
+          CircuitWireOverlay lab gate) — hide the toggle everywhere else. */}
+      {(fig === 2 || fig === 3) && (
+        <>
+          <div className="mt-3 text-[10px] tracking-widest text-[#666]">
+            3D WIRES
+          </div>
+          <button
+            onClick={onToggleWires}
+            title="Show arched 3D jumper wires + directional current arrows"
+            className={`w-16 rounded-full border border-[#222] px-3 py-1 text-xs ${showWires ? "bg-[#222] text-[#EAE6DF]" : ""}`}
+          >
+            {showWires ? "On" : "Off"}
+          </button>
+        </>
+      )}
       <div className="mt-auto pt-4 text-[10px] leading-snug text-[#666]">
         <Wrench size={11} className="inline" /> Drag to orbit · scroll to zoom ·
         click a placed part to remove it

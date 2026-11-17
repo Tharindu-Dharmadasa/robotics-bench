@@ -51,36 +51,33 @@ export interface LabInstrumentPanelProps {
 
 /* ---------- shared retro hardware chrome ---------- */
 
-/** Dark instrument bezel with corner screws and a silkscreened module tag. */
+/** Warm cream instrument module: crisp ink border, hard offset shadow,
+ *  corner screws and a silkscreened module tag. */
 function Module({ tag, title, children }: { tag: string; title: string; children: ReactNode }) {
   return (
-    <div className="relative rounded-lg border-2 border-[#222] bg-[#1e1b17] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-      {["left-1 top-1", "right-1 top-1", "left-1 bottom-1", "right-1 bottom-1"].map((pos) => (
+    <div className="relative rounded-lg border-[1.5px] border-[#1E1E1C] bg-[#F6F3EC] p-3 font-mono text-xs shadow-[3px_3px_0_#1E1E1C]">
+      {["left-1.5 top-1.5", "right-1.5 top-1.5", "left-1.5 bottom-1.5", "right-1.5 bottom-1.5"].map((pos) => (
         <span
           key={pos}
-          className={`absolute ${pos} h-1 w-1 rounded-full bg-[#4a453c] shadow-inner`}
+          className={`absolute ${pos} h-1 w-1 rounded-full bg-[#C9C2B4] shadow-[inset_0_1px_1px_rgba(30,30,28,0.5)]`}
         />
       ))}
-      <div className="mb-1.5 flex items-center justify-between px-1">
-        <span className="text-[8px] font-bold tracking-widest text-[#c8b26a]">{tag}</span>
-        <span className="text-[8px] tracking-widest text-[#8a8378]">{title}</span>
+      <div className="mb-2 flex items-center justify-between gap-2 border-b border-[#1E1E1C]/15 px-0.5 pb-1.5">
+        <span className="shrink-0 text-[9px] font-bold tracking-widest text-[#1E1E1C]">{tag}</span>
+        <span className="truncate text-[9px] tracking-widest text-[#6B655A]">{title}</span>
       </div>
       {children}
     </div>
   );
 }
 
-/** Amber-on-black LCD strip with faint scanlines; warn = red alarm palette. */
+/** Warm paper readout strip; warn = red alarm palette. */
 function Lcd({ children, warn = false }: { children: ReactNode; warn?: boolean }) {
   return (
     <div
-      className={`rounded-sm border border-[#3a352c] bg-[#0d120c] px-2 py-1.5 font-mono text-[10px] leading-snug shadow-[inset_0_0_6px_rgba(0,0,0,0.8)] ${
-        warn ? "text-[#ff7a5c]" : "text-[#9fe870]"
+      className={`rounded-md border-[1.5px] border-[#1E1E1C] bg-[#EFE9DC] px-2 py-1.5 font-mono text-[10px] leading-snug shadow-[inset_1px_1px_0_rgba(30,30,28,0.12)] ${
+        warn ? "text-[#B3261E]" : "text-[#1E1E1C]"
       }`}
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(0deg, rgba(0,0,0,0.28) 0px, rgba(0,0,0,0.28) 1px, transparent 1px, transparent 3px)",
-      }}
     >
       {children}
     </div>
@@ -90,16 +87,21 @@ function Lcd({ children, warn = false }: { children: ReactNode; warn?: boolean }
 function Readout({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <span className="text-[8px] tracking-widest text-[#8a8378]">{label}</span>
-      <span className={`font-mono text-[11px] font-bold ${warn ? "text-[#ff7a5c]" : ""}`}>
+      <span className="shrink-0 text-[8px] tracking-widest text-[#6B655A]">{label}</span>
+      <span
+        className={`whitespace-nowrap font-mono text-[11px] font-bold ${
+          warn ? "text-[#B3261E]" : "text-[#1E1E1C]"
+        }`}
+      >
         {value}
       </span>
     </div>
   );
 }
 
-/** Chunky hardware button; active = latched (amber), danger = red accent.
- *  Optional pointer handlers turn it into a momentary switch (shaft press). */
+/** Chunky tactile button with a hard offset shadow; active = latched (ink),
+ *  danger = red accent. Optional pointer handlers turn it into a momentary
+ *  switch (shaft press). */
 function HwButton({
   onClick,
   onPointerDown,
@@ -126,14 +128,14 @@ function HwButton({
       onPointerUp={onPointerUp}
       onPointerLeave={onPointerLeave}
       disabled={disabled}
-      className={`rounded border border-[#222] px-2 py-1 text-[9px] font-bold uppercase tracking-wider transition active:translate-y-px ${
+      className={`rounded-md border-[1.5px] border-[#1E1E1C] px-2 py-1 text-[9px] font-bold uppercase tracking-wider shadow-[2px_2px_0_#1E1E1C] transition active:translate-y-px active:shadow-none ${
         disabled
-          ? "cursor-not-allowed bg-[#3a352c] text-[#8a8378]"
+          ? "cursor-not-allowed border-[#1E1E1C]/30 bg-[#E7E1D4] text-[#6B655A] shadow-none"
           : danger
-            ? "bg-[#f3efe7] text-red-800 hover:bg-red-800 hover:text-[#EAE6DF]"
+            ? "bg-[#F6F3EC] text-[#B3261E] hover:bg-[#B3261E] hover:text-[#F6F3EC]"
             : active
-              ? "bg-[#c8b26a] text-[#181410]"
-              : "bg-[#f3efe7] text-[#222] hover:bg-[#222] hover:text-[#EAE6DF]"
+              ? "bg-[#1E1E1C] text-[#F6F3EC]"
+              : "bg-[#F6F3EC] text-[#1E1E1C] hover:bg-[#EFE9DC]"
       }`}
     >
       {children}
@@ -199,7 +201,7 @@ function D13Probe({
         <span
           title="D13 level LED"
           className={`ml-auto h-2 w-2 rounded-full ${
-            high ? "bg-[#39d353] shadow-[0_0_6px_#39d353]" : "bg-[#5c1712]"
+            high ? "bg-[#39d353] shadow-[0_0_6px_#39d353]" : "bg-[#C9C2B4]"
           }`}
         />
       </div>
@@ -237,7 +239,7 @@ function OhmMeter({
           warn={over}
         />
       </Lcd>
-      <div className="mt-1 text-[8px] tracking-widest text-[#8a8378]">
+      <div className="mt-1 text-[8px] tracking-widest text-[#6B655A]">
         I = (5.0 − Vf 2.0) / R · LIMIT 20 mA
       </div>
     </>
@@ -271,21 +273,48 @@ function BaseDrive({
   };
   const d9 = d9High;
 
+  // live telemetry: I_B = (5 V − V_BE) / 1kΩ ≈ 4.3 mA while the control loop
+  // is intact; the relay only stays pulled-in with the load loop complete.
+  const controlOk = ["rb", "q1"].every((id) => placed.has(id));
+  const loadOk = ["p1", "k1", "q1"].every((id) => placed.has(id));
+  const iBase = d9 && controlOk ? 4.3 : 0.0;
+  const relayClosed = d9 && controlOk && loadOk;
+
   return (
     <>
-      <Lcd warn={!guarded}>
-        <div className="flex items-baseline justify-between">
-          <span>D9 BASE · {d9 ? "HIGH" : "LOW"}</span>
-          <span className="text-[11px] font-bold">{d9 ? "5.0 V" : "0.0 V"}</span>
-        </div>
-      </Lcd>
-      <div className="mt-1.5 flex items-center gap-2">
-        <HwButton onClick={toggle} active={d9}>
-          D9 {d9 ? "High" : "Low"}
-        </HwButton>
+      {/* tactile D9 base-input toggle */}
+      <button
+        onClick={toggle}
+        className={`w-full rounded-md border-[1.5px] border-[#1E1E1C] px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider shadow-[2px_2px_0_#1E1E1C] transition active:translate-y-px active:shadow-none ${
+          d9
+            ? "bg-[#1E1E1C] text-[#F6F3EC]"
+            : "bg-[#F6F3EC] text-[#1E1E1C] hover:bg-[#EFE9DC]"
+        }`}
+      >
+        D9 BASE INPUT: {d9 ? "5V HIGH" : "0V LOW"}
+      </button>
+      {/* compact live telemetry pills */}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-[#1E1E1C] bg-[#EFE9DC] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#1E1E1C]">
+          <span className="font-medium opacity-60">I_base:</span>
+          <span>{iBase.toFixed(1)} mA</span>
+        </span>
         <span
-          className={`ml-auto text-[8px] tracking-widest ${
-            guarded ? "text-[#8a8378]" : "text-[#ff7a5c]"
+          className={`inline-flex items-center gap-1.5 rounded-full border-[1.5px] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+            relayClosed
+              ? "border-[#166534] bg-[#E3F0E3] text-[#166534]"
+              : "border-[#1E1E1C] bg-[#EFE9DC] text-[#1E1E1C]"
+          }`}
+        >
+          <span className="font-medium opacity-60">RELAY:</span>
+          <span>{relayClosed ? "CLOSED (12V ON)" : "OPEN"}</span>
+        </span>
+        {/* flyback watchdog status */}
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full border-[1.5px] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+            guarded
+              ? "border-[#1E1E1C] bg-[#EFE9DC] text-[#1E1E1C]"
+              : "border-[#B3261E] bg-[#F9E3DF] text-[#B3261E]"
           }`}
         >
           {guarded ? "1N4007 ✓" : "NO FLYBACK"}
@@ -337,8 +366,8 @@ function RadioBench({
   return (
     <>
       <div className="mb-1 flex items-center justify-between px-0.5">
-        <span className="text-[8px] tracking-widest text-[#8a8378]">WS2812 · GPIO48</span>
-        <span className="font-mono text-[9px] text-[#9fe870]">{sw.hex}</span>
+        <span className="text-[8px] tracking-widest text-[#6B655A]">WS2812 · GPIO48</span>
+        <span className="font-mono text-[9px] font-bold text-[#1E1E1C]">{sw.hex}</span>
       </div>
       <div className="mb-1.5 flex gap-1 px-0.5">
         {WS_SWATCHES.map((s) => (
@@ -351,7 +380,7 @@ function RadioBench({
             }}
             style={{ background: s.hex }}
             className={`h-4 w-4 rounded-sm border transition hover:scale-110 ${
-              sw.hex === s.hex ? "border-[#c8b26a] ring-1 ring-[#c8b26a]" : "border-[#4a453c]"
+              sw.hex === s.hex ? "border-[#1E1E1C] ring-1 ring-[#1E1E1C]" : "border-[#1E1E1C]/40"
             }`}
           />
         ))}
@@ -384,11 +413,11 @@ function SonarRanger({
         value={targetDistance}
         onChange={(e) => onTargetDistance(Number(e.target.value))}
         title="Move the reflector target 5–200 cm from the transducers"
-        className="mt-2 w-full accent-[#c8b26a]"
+        className="mt-2 w-full accent-[#B45309]"
       />
-      <div className="mt-0.5 flex items-center justify-between text-[8px] tracking-widest text-[#8a8378]">
+      <div className="mt-0.5 flex items-center justify-between text-[8px] tracking-widest text-[#6B655A]">
         <span>5 cm</span>
-        <span className="animate-pulse text-[#c8b26a]">● PING</span>
+        <span className="animate-pulse text-[#B45309]">● PING</span>
         <span>200 cm</span>
       </div>
     </>
@@ -426,7 +455,7 @@ function ImuTiltRig({
           onImuTiltChange?.({ pitch: Number(e.target.value), roll })
         }
         title="Pitch the GY-521 rig -45°..+45° about the board's lateral axis"
-        className="mt-2 w-full accent-[#c8b26a]"
+        className="mt-2 w-full accent-[#B45309]"
       />
       <input
         type="range"
@@ -438,9 +467,9 @@ function ImuTiltRig({
           onImuTiltChange?.({ pitch, roll: Number(e.target.value) })
         }
         title="Roll the GY-521 rig -45°..+45° about the board's long axis"
-        className="mt-1 w-full accent-[#c8b26a]"
+        className="mt-1 w-full accent-[#B45309]"
       />
-      <div className="mt-0.5 flex items-center justify-between text-[8px] tracking-widest text-[#8a8378]">
+      <div className="mt-0.5 flex items-center justify-between text-[8px] tracking-widest text-[#6B655A]">
         <span>-45°</span>
         <span>PITCH / ROLL</span>
         <span>+45°</span>
@@ -468,11 +497,11 @@ function EncoderDrive({
     <>
       <Lcd warn={!!encoderPressed}>
         <div className="flex items-baseline justify-between">
-          <span className="text-[8px] tracking-widest text-[#8a8378]">STEP</span>
+          <span className="text-[8px] tracking-widest text-[#6B655A]">STEP</span>
           <span className="font-mono text-lg font-bold leading-none">{step}</span>
         </div>
         <div className="mt-1 flex items-baseline justify-between">
-          <span className="text-[8px] tracking-widest text-[#8a8378]">
+          <span className="text-[8px] tracking-widest text-[#6B655A]">
             SHAFT SW
           </span>
           <span className="font-mono text-[11px] font-bold">
@@ -480,7 +509,7 @@ function EncoderDrive({
           </span>
         </div>
       </Lcd>
-      <div className="mt-1.5 flex items-center gap-1.5">
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
         <HwButton onClick={() => onEncoderRotate?.(-1)}>⟲ CCW</HwButton>
         <HwButton onClick={() => onEncoderRotate?.(1)}>⟳ CW</HwButton>
         <HwButton
@@ -492,7 +521,7 @@ function EncoderDrive({
           Press Shaft
         </HwButton>
       </div>
-      <div className="mt-1 text-[8px] tracking-widest text-[#8a8378]">
+      <div className="mt-1 text-[8px] tracking-widest text-[#6B655A]">
         1 DETENT = π/10 SHAFT RAD · SW ZEROS COUNT
       </div>
     </>
@@ -523,11 +552,11 @@ function PwmServoDrive({
         value={angle}
         onChange={(e) => onPcaAngleChange?.(Number(e.target.value))}
         title="Drive all 16 PCA9685 channels with a 1.0–2.0 ms servo pulse"
-        className="mt-2 w-full accent-[#c8b26a]"
+        className="mt-2 w-full accent-[#B45309]"
       />
-      <div className="mt-0.5 flex items-center justify-between text-[8px] tracking-widest text-[#8a8378]">
+      <div className="mt-0.5 flex items-center justify-between text-[8px] tracking-widest text-[#6B655A]">
         <span>0°</span>
-        <span className="animate-pulse text-[#c8b26a]">● CH 0–15</span>
+        <span className="animate-pulse text-[#B45309]">● CH 0–15</span>
         <span>180°</span>
       </div>
     </>
@@ -556,7 +585,7 @@ export default function LabInstrumentPanel(props: LabInstrumentPanelProps) {
       break;
     case 2:
       tag = "SG-03";
-      title = "BASE DRIVE · D9";
+      title = "TRANSISTOR RELAY DRIVER";
       body = <BaseDrive {...props} />;
       break;
     case 3:

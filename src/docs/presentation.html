@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Robotics Bench — Executive Project Presentation</title>
+    <style>
+        :root {
+            --bg: #EAE6DF;
+            --surface: #F6F3EC;
+            --ink: #1E1E1C;
+            --muted: #5A5750;
+            --accent: #1F6FB2;
+            --success: #2F7D46;
+            --warn: #C96A09;
+            --danger: #B8322A;
+            --border: #1E1E1C;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            background-color: var(--bg);
+            color: var(--ink);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .circuit-bg {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.35;
+        }
+
+        .pulse-dot {
+            animation: flowPulse 6s linear infinite;
+        }
+
+        .pulse-dot.delay-1 {
+            animation-delay: -2s;
+        }
+
+        .pulse-dot.delay-2 {
+            animation-delay: -4s;
+        }
+
+        @keyframes flowPulse {
+            0% {
+                stroke-dashoffset: 600;
+            }
+
+            100% {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        header {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.9rem 2.5rem;
+            background: var(--surface);
+            border-bottom: 1.5px solid var(--border);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 800;
+            font-size: 0.95rem;
+            letter-spacing: 0.05em;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 0 0 rgba(47, 125, 70, 0.6);
+            animation: ping 2s infinite;
+        }
+
+        @keyframes ping {
+            0% {
+                box-shadow: 0 0 0 0 rgba(47, 125, 70, 0.6);
+            }
+
+            70% {
+                box-shadow: 0 0 0 8px rgba(47, 125, 70, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(47, 125, 70, 0);
+            }
+        }
+
+        .pill {
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 0.25rem 0.7rem;
+            border-radius: 999px;
+            border: 1.5px solid var(--border);
+            background: var(--bg);
+        }
+
+        .pill.green {
+            background: var(--success);
+            color: #fff;
+            border-color: var(--success);
+        }
+
+        main {
+            position: relative;
+            z-index: 5;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .slide {
+            position: absolute;
+            inset: 0;
+            padding: 2.5rem 4rem;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            max-width: 1220px;
+            margin: 0 auto;
+        }
+
+        .slide.active {
+            display: flex;
+        }
+
+        .slide.active .anim-1 {
+            animation: slideUp 0.4s ease-out both;
+        }
+
+        .slide.active .anim-2 {
+            animation: slideUp 0.4s ease-out 0.08s both;
+        }
+
+        .slide.active .anim-3 {
+            animation: slideUp 0.4s ease-out 0.16s both;
+        }
+
+        .slide.active .anim-4 {
+            animation: slideUp 0.4s ease-out 0.24s both;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(14px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .kicker {
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            line-height: 1.15;
+            margin-bottom: 1rem;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.85rem;
+            line-height: 1.2;
+            margin-bottom: 0.6rem;
+        }
+
+        .subtitle {
+            font-size: 0.98rem;
+            line-height: 1.65;
+            color: var(--muted);
+            max-width: 780px;
+            margin-bottom: 1.8rem;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.35rem;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.35rem;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            padding: 1.4rem;
+            box-shadow: 4px 4px 0 var(--border);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 6px 6px 0 var(--border);
+        }
+
+        .card-title {
+            font-size: 0.98rem;
+            font-weight: 800;
+            margin-bottom: 0.65rem;
+        }
+
+        .card p,
+        .card li {
+            font-size: 0.84rem;
+            line-height: 1.55;
+            color: #32312D;
+        }
+
+        .card ul {
+            padding-left: 1.15rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+        }
+
+        .progress-track {
+            width: 100%;
+            height: 30px;
+            background: var(--surface);
+            border: 1.5px solid var(--border);
+            border-radius: 999px;
+            padding: 3px;
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: var(--success);
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 14px;
+            color: #fff;
+            font-size: 0.76rem;
+            font-weight: 800;
+            transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .slide.active .progress-bar {
+            width: 95%;
+        }
+
+        .terminal {
+            background: #1B1B19;
+            color: #A3E635;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            padding: 1.2rem;
+            font-size: 0.8rem;
+            line-height: 1.65;
+            box-shadow: 4px 4px 0 var(--border);
+        }
+
+        .t-err {
+            color: #F87171;
+            font-weight: 700;
+        }
+
+        .t-warn {
+            color: #FBBF24;
+        }
+
+        .t-dim {
+            color: #9CA3AF;
+        }
+
+        footer {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.85rem 2.5rem;
+            background: var(--surface);
+            border-top: 1.5px solid var(--border);
+        }
+
+        .dots {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 1.5px solid var(--border);
+            background: transparent;
+            cursor: pointer;
+        }
+
+        .dot.active {
+            background: var(--ink);
+        }
+
+        .controls {
+            display: flex;
+            gap: 0.6rem;
+        }
+
+        button {
+            font-family: inherit;
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 0.45rem 1.15rem;
+            border-radius: 999px;
+            border: 1.5px solid var(--border);
+            background: var(--bg);
+            color: var(--ink);
+            cursor: pointer;
+        }
+
+        button:hover:not(:disabled) {
+            background: var(--ink);
+            color: var(--bg);
+        }
+
+        button:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body>
+    <svg class="circuit-bg" viewBox="0 0 1440 900" fill="none" xmlns="http://w3.org">
+        <path d="M-20 160 H280 L340 220 H680 L740 160 H1460" stroke="#1E1E1C" stroke-width="1.5" />
+        <path d="M-20 720 H420 L480 660 H960 L1020 720 H1460" stroke="#1E1E1C" stroke-width="1.5" />
+        <path d="M220 -20 V340 L280 400 V920" stroke="#1E1E1C" stroke-width="1.5" />
+        <path d="M1180 -20 V460 L1120 520 V920" stroke="#1E1E1C" stroke-width="1.5" />
+        <path class="pulse-dot" d="M-20 160 H280 L340 220 H680 L740 160 H1460" stroke="#1F6FB2" stroke-width="3"
+            stroke-dasharray="45 555" />
+        <path class="pulse-dot delay-1" d="M-20 720 H420 L480 660 H960 L1020 720 H1460" stroke="#2F7D46"
+            stroke-width="3" stroke-dasharray="45 555" />
+        <path class="pulse-dot delay-2" d="M220 -20 V340 L280 400 V920" stroke="#C96A09" stroke-width="3"
+            stroke-dasharray="35 565" />
+    </svg>
+
+    <header>
+        <div class="brand">
+            <span class="status-dot"></span>
+            <span>ROBOTICS BENCH</span>
+        </div>
+        <div style="display:flex; gap:0.6rem; align-items:center;">
+            <span class="pill green">95% COMPLETE</span>
+            <span class="pill" id="counter">01 / 05</span>
+        </div>
+    </header>
+
+    <main>
+        <section class="slide active">
+            <div class="kicker anim-1">Project Briefing</div>
+            <h1 class="anim-2">Robotics Bench:<br />3D Interactive Electronics &amp; Fault Lab</h1>
+            <p class="subtitle anim-3">
+                A zero-backend, browser-based 3D hardware simulator where learners assemble real-world robotics boards
+                component-by-component, inspect live electrical current flow, and safely test circuit failures in real
+                time.
+            </p>
+            <div class="grid-3 anim-4">
+                <div class="card">
+                    <div class="card-title">Hands-On Assembly</div>
+                    <p>Step-by-step PCB assembly from bare board to component placement, soldering, USB power-up, and
+                        live firmware execution.</p>
+                </div>
+                <div class="card">
+                    <div class="card-title">Real Failure Physics</div>
+                    <p>Removing resistors, flyback diodes, or regulators triggers realistic arc flashes, sparks, smoke,
+                        and diagnostic explanations.</p>
+                </div>
+                <div class="card">
+                    <div class="card-title">Open Experiment Sandbox</div>
+                    <p>Includes 13 guided hardware modules plus a full-screen customizable breadboard workbench for
+                        free-form circuit prototyping.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="kicker anim-1">01 · Project Requirements</div>
+            <h2 class="anim-2">Key Objectives Defined for the Build</h2>
+            <p class="subtitle anim-3">Built to replace passive 2D circuit diagrams with realistic, interactive 3D
+                hardware behavior.</p>
+            <div class="grid-2 anim-4">
+                <div class="card">
+                    <div class="card-title">Authentic Hardware Representation</div>
+                    <ul>
+                        <li>Distinct physical form factors for every lab (notched Arduino PCB, solderless breadboard,
+                            perfboard, DevKitC-1, heatsinks, transparent servo gearbox, OLED glass).</li>
+                        <li>Hybrid 3D view toggle supporting both interactive procedural parts and imported industrial
+                            CAD (.glb) models.</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <div class="card-title">Interactive Testing &amp; Diagnostics</div>
+                    <ul>
+                        <li>Clickable Bill of Materials (BOM) to add, remove, or change component values (e.g., 220Ω vs
+                            10Ω, VREF trimpot tuning).</li>
+                        <li>Live interactive controls per lab (tilt sliders, rotary encoder knob, PWM sweep, ultrasonic
+                            distance target) paired with Serial Monitor telemetry.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="kicker anim-1">02 · Current Progress</div>
+            <h2 class="anim-2">What Has Been Delivered So Far</h2>
+            <div class="progress-track anim-2">
+                <div class="progress-bar">95% Complete · Final Polish Remaining</div>
+            </div>
+            <div class="grid-3 anim-3">
+                <div class="card">
+                    <div class="card-title">All 13 Guided Labs</div>
+                    <ul>
+                        <li><strong>01–05:</strong> Arduino Uno R3 (Hybrid CAD), LED + Resistor, Transistor Switch,
+                            ESP32-S3 DevKit, HC-SR04 Ultrasonic.</li>
+                        <li><strong>06–13:</strong> L298N Driver, A4988 Stepper, SG90 Servo Cutaway, MPU-6050 IMU,
+                            KY-040 Encoder, PCA9685 16-Ch PWM, I2C OLED, 9-Axis Fusion.</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <div class="card-title">4-Stage Burnout Engine</div>
+                    <ul>
+                        <li>Imperative 60fps Three.js physics: orange arc-flash, ballistic sparks, PCB scorch decals,
+                            rising smoke, and synthesized Web Audio pop.</li>
+                        <li>Clean material restoration when repairing or replacing damaged parts.</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <div class="card-title">Custom Sandbox Mode</div>
+                    <ul>
+                        <li>Full-screen 830-point breadboard workbench with click-to-wire 3D jumper cables and a
+                            Union-Find netlist solver.</li>
+                        <li>Includes starter circuit presets, multimeter voltage probe, and JSON export.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="kicker anim-1">03 · Educational Impact</div>
+            <h2 class="anim-2">How Users Learn by Experimenting</h2>
+            <p class="subtitle anim-3">Every component is mapped to real circuit rules—giving instant visual and Serial
+                Monitor feedback when something goes wrong.</p>
+            <div class="grid-2 anim-4">
+                <div class="card">
+                    <div class="card-title">Three Failure Severities</div>
+                    <ul>
+                        <li><strong>BURNOUT:</strong> Missing current limiters or flyback diodes cause
+                            overcurrent/back-EMF damage with 3D sparks and smoke.</li>
+                        <li><strong>HALT:</strong> Missing regulators, crystals, or pull-ups break circuit continuity
+                            and highlight the open pad in 3D.</li>
+                        <li><strong>DEGRADED:</strong> Missing decoupling or debounce capacitors introduce realistic
+                            signal noise and jitter.</li>
+                    </ul>
+                </div>
+                <div class="terminal">
+                    <div class="t-dim">&gt; System Powered ON · Running Blink.ino</div>
+                    <div>[0.5s] D13 HIGH · Current: 14.5 mA (Nominal)</div>
+                    <div class="t-err">! BURNOUT: 220Ω Current-Limiting Resistor removed!</div>
+                    <div class="t-err">! ERROR: Current spiked to 135 mA — LED destroyed.</div>
+                    <div class="t-warn">[LEARNING NOTE]: Series resistance is required to limit forward current below
+                        the LED's 20 mA max rating.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="kicker anim-1">04 · Future Roadmap (Phase 2)</div>
+            <h2 class="anim-2">Planned Enhancements &amp; Next Phase</h2>
+            <p class="subtitle anim-3">High-value expansions ready to build on top of our modular client-side engine.
+            </p>
+            <div class="grid-3 anim-4">
+                <div class="card">
+                    <div class="card-title">Multi-Board System Wiring</div>
+                    <p>Dock multiple full modules together on one bench (e.g., wiring an ESP32-S3 directly to an L298N
+                        motor driver, IMU, and OLED) with cross-board fault propagation.</p>
+                </div>
+                <div class="card">
+                    <div class="card-title">Virtual Oscilloscope</div>
+                    <p>Real-time 2D waveform plotter to inspect PWM duty cycles, I2C clock/data edges, quadrature
+                        encoder phase shifts, and contact bounce noise.</p>
+                </div>
+                <div class="card">
+                    <div class="card-title">Troubleshooting Challenges</div>
+                    <p>"Fix the Broken Robot" diagnostic missions where learners use the multimeter probe to locate
+                        hidden faults and repair circuits under time limits.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="dots" id="dots"></div>
+        <div class="controls">
+            <button id="prev" onclick="move(-1)">← Prev</button>
+            <button id="next" onclick="move(1)">Next →</button>
+        </div>
+    </footer>
+
+    <script>
+        const slides = document.querySelectorAll('.slide');
+        const dotsEl = document.getElementById('dots');
+        const counterEl = document.getElementById('counter');
+        const prevBtn = document.getElementById('prev');
+        const nextBtn = document.getElementById('next');
+        let idx = 0;
+
+        slides.forEach((_, i) => {
+            const d = document.createElement('button');
+            d.className = 'dot' + (i === 0 ? ' active' : '');
+            d.onclick = () => show(i);
+            dotsEl.appendChild(d);
+        });
+
+        function show(n) {
+            slides[idx].classList.remove('active');
+            dotsEl.children[idx].classList.remove('active');
+            idx = Math.max(0, Math.min(slides.length - 1, n));
+            slides[idx].classList.add('active');
+            dotsEl.children[idx].classList.add('active');
+            counterEl.textContent = `${String(idx + 1).padStart(2, '0')} / ${String(slides.length).padStart(2, '0')}`;
+            prevBtn.disabled = idx === 0;
+            nextBtn.disabled = idx === slides.length - 1;
+        }
+
+        function move(step) { show(idx + step); }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') move(1);
+            if (e.key === 'ArrowLeft') move(-1);
+        });
+
+        show(0);
+    </script>
+</body>
+
+</html>

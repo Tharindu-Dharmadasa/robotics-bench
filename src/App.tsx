@@ -631,38 +631,15 @@ export default function App() {
         }
         if (fault) return log("! Fault active — repair before running.");
 
-        // Missing critical part (e.g. LED without its resistor) => board faults on power-on.
-        const rule = activeBoard.faultRule;
-        const missingCritical =
-          rule?.criticalParts?.filter((cid) => !placed.has(cid)) ?? [];
-        if (rule && missingCritical.length > 0) return triggerFault(rule);
-
+        // Enforce complete assembly on every lab: power-on is refused until
+        // every part is placed and the exact missing list is printed. Hot-swap
+        // removal after the board is running still works — its consequence is
+        // raised separately in togglePart.
         if (count < total) {
           const missing = parts.filter((p) => !placed.has(p.id));
-          log(`! Missing ${total - count} parts.`);
-          // A missing part that carries a removal consequence faults the
-          // power-on exactly as if it had been pulled while powered (e.g. a
-          // missing flyback diode destroys the transistor as current flows).
-          const effectful = missing.find((p) => p.onRemoveEffect);
-          if (effectful && effectful.onRemoveEffect) {
-            const eff = effectful.onRemoveEffect;
-            const keep = eff.severity === "degraded";
-            raiseEffect(effectful, eff, {
-              keepRunning: true,
-              tag: effectTag(eff.severity),
-            });
-            if (keep) {
-              log(`> avrdude: uploading ${activeBoard.name} sketch ... done.`);
-              setRunning(true);
-            }
-            return;
-          }
-          setFault({
-            partId: missing[0].id,
-            partName: missing[0].name,
-            severity: "halt",
-            message: `POWER-ON REFUSED: the board is incomplete — ${total - count} part(s) still missing, starting with the ${missing[0].name}. A PCB only becomes a circuit when every part is placed and soldered; until then there is nothing to power up.`,
-          });
+          log(
+            `! INCOMPLETE ASSEMBLY: Place all parts before powering on (Missing: ${missing.map((p) => p.name).join(", ")})`,
+          );
           return;
         }
         if (!soldered) return log("! Cold joints — solder the board first.");

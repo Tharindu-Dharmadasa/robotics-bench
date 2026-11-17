@@ -20,7 +20,6 @@ import * as THREE from "three";
 
 import {
   AnimatedPart,
-  CurrentFlow,
   Pcb,
   SolderJoints,
   UsbCable,
@@ -793,6 +792,188 @@ function UartLeds({ active }: { active: boolean }) {
   );
 }
 
+/* ---------- PCB current-flow overlay (all 13 boards) ---------- */
+
+/** Trace palette: power rails amber, bus signals cyan, active outputs green. */
+const FLOW_POWER = "#f59e0b";
+const FLOW_SIGNAL = "#38bdf8";
+const FLOW_OUTPUT = "#22c55e";
+/** Frozen / open-circuit state: dark gray, chevrons stop gliding. */
+const FLOW_DEAD = "#3a3a3a";
+/** Elevation above the soldermask (PCB top face) — zero z-fighting. */
+const FLOW_LIFT = 0.022;
+
+const FLOW_UP = new THREE.Vector3(0, 1, 0);
+const _flowPt = new THREE.Vector3();
+const _flowTan = new THREE.Vector3();
+
+/** Colour class of a part's circuit leg (power rail / signal / output). */
+const flowColorFor = (p: Part): string => {
+  const tag = `${p.id} ${p.name}`;
+  if (
+    /(^|[^a-z])(vin|vcc|vdd|5v|12v|3v3|pwr|power)([^a-z]|$)|fuse|ldo|regulator|jack|barrel/i.test(
+      tag,
+    ) ||
+    p.kind === "fuse"
+  )
+    return FLOW_POWER;
+  if (
+    /(^|[^a-z])(i2c|spi|pwm|echo|sda|scl|mosi|miso|sck|clk|trig|tx|rx|sig)([^a-z]|$)|imu|encoder|transducer|sensor/i.test(
+      tag,
+    )
+  )
+    return FLOW_SIGNAL;
+  return FLOW_OUTPUT;
+};
+
+interface FlowPath {
+  /** part id this leg feeds — the stream dies the moment it is unplaced */
+  targetId: string;
+  color: string;
+  curve: THREE.CatmullRomCurve3;
+  /** chevron count scales with trace length */
+  arrows: number;
+}
+
+/**
+ * Routes one flat, rounded-elbow trace from the power source through every
+ * non-source part to the GND header, all at y = PCB top + FLOW_LIFT.
+ */
+function buildFlowPaths(parts: Part[]): FlowPath[] {
+  if (parts.length < 3) return [];
+  const src =
+    parts.find((p) => p.kind === "usb") ??
+    parts.find((p) => /usb|barrel|jack|pwr/i.test(`${p.id} ${p.kind}`)) ??
+    parts[0];
+  const gnd =
+    parts.find((p) => p.kind === "hdr") ??
+    parts.find((p) => /gnd|header|hdr|bus/i.test(`${p.id} ${p.kind}`)) ??
+    parts[parts.length - 1];
+  const y = PCB_T / 2 + FLOW_LIFT;
+  const targets = parts.filter((p) => p.id !== src.id && p.id !== gnd.id);
+  const n = targets.length;
+  return targets.map((t, i) => {
+    // fan the legs apart at the source and reconverge at ground so the
+    // shared rails read as parallel traces instead of one thick line
+    const spread = n > 1 ? (i / (n - 1) - 0.5) * 0.44 : 0;
+    const S = new THREE.Vector3(src.p[0] + spread * 0.5, y, src.p[1] + spread);
+    const P = new THREE.Vector3(t.p[0], y, t.p[1]);
+    const G = new THREE.Vector3(gnd.p[0] + spread * 0.5, y, gnd.p[1] + spread);
+    const curve = new THREE.CatmullRomCurve3(
+      [S, new THREE.Vector3(P.x, y, S.z), P, new THREE.Vector3(G.x, y, P.z), G],
+      false,
+      "catmullrom",
+      0.35,
+    );
+    return {
+      targetId: t.id,
+      color: flowColorFor(t),
+      curve,
+      arrows: Math.max(
+        1,
+        Math.min(3, Math.round(curve.getLength() / 1.5)),
+      ),
+    };
+  });
+}
+
+/**
+ * High-contrast directional current-flow overlay for the active PCB:
+ * colour-coded emissive trace lines with 3D cone chevrons gliding in
+ * useFrame from the power/signal source through each placed component to
+ * GND. The instant a leg's part is removed — or a halt/burnout fault fires —
+ * that stream freezes in place and dims to dark gray.
+ */
+function PcbCurrentFlow({
+  parts,
+  placed,
+  active,
+  explode,
+}: {
+  parts: Part[];
+  placed: Set<string>;
+  active: boolean;
+  explode: number;
+}) {
+  const paths = useMemo(() => buildFlowPaths(parts), [parts]);
+  const tubes = useRef<(THREE.Mesh | null)[]>([]);
+  const chevrons = useRef<(THREE.Group | null)[]>([]);
+  const phase = useRef(0);
+
+  useFrame((_, dt) => {
+    if (active) phase.current = (phase.current + dt * 0.5) % 1;
+    paths.forEach((p, i) => {
+      const live = active && placed.has(p.targetId);
+      const tube = tubes.current[i];
+      if (tube) {
+        const m = tube.material as THREE.MeshStandardMaterial;
+        m.color.set(live ? p.color : FLOW_DEAD);
+        m.emissive.set(live ? p.color : FLOW_DEAD);
+        m.emissiveIntensity = live ? 1.5 : 0.3;
+      }
+      const g = chevrons.current[i];
+      if (!g) return;
+      g.children.forEach((c, j) => {
+        const m = (c as THREE.Mesh).material as THREE.MeshStandardMaterial;
+        m.color.set(live ? "#ffffff" : FLOW_DEAD);
+        m.emissive.set(live ? p.color : FLOW_DEAD);
+        m.emissiveIntensity = live ? 2.2 : 0.3;
+        if (!live) return; // frozen exactly where it stopped
+        const t = (phase.current + j / g.children.length) % 1;
+        p.curve.getPointAt(t, _flowPt);
+        c.position.copy(_flowPt);
+        p.curve.getTangentAt(t, _flowTan);
+        if (_flowTan.lengthSq() > 1e-6)
+          c.quaternion.setFromUnitVectors(FLOW_UP, _flowTan.normalize());
+      });
+    });
+  });
+
+  if (paths.length === 0) return null;
+
+  return (
+    // follow the PCB drop in the exploded view
+    <group position={[0, -explode * 0.6, 0]}>
+      {paths.map((p, i) => (
+        <group key={p.targetId}>
+          <mesh
+            ref={(m) => {
+              tubes.current[i] = m;
+            }}
+          >
+            <tubeGeometry args={[p.curve, 72, 0.016, 6, false]} />
+            <meshStandardMaterial
+              color={p.color}
+              emissive={p.color}
+              emissiveIntensity={1.5}
+              roughness={0.4}
+              metalness={0}
+            />
+          </mesh>
+          <group
+            ref={(g) => {
+              chevrons.current[i] = g;
+            }}
+          >
+            {Array.from({ length: p.arrows }).map((_, j) => (
+              <mesh key={j}>
+                <coneGeometry args={[0.05, 0.16, 10]} />
+                <meshStandardMaterial
+                  color="#ffffff"
+                  emissive={p.color}
+                  emissiveIntensity={2.2}
+                  roughness={0.3}
+                  depthWrite={false}
+                />
+              </mesh>
+            ))}
+          </group>
+        </group>
+      ))}
+    </group>
+  );
+}
+
 /* ---------- HC-SR04 reflector target (lab instrument slider) ---------- */
 
 /**
@@ -1039,6 +1220,15 @@ export default function Viewport3D({
     count === total &&
     (!eduFault || eduFault.severity === "degraded");
 
+  /**
+   * PCB current-flow gate: live whenever the bench is powered OR the sketch
+   * is running, and no halt/burnout fault is active (a degraded warning keeps
+   * the streams alive; per-leg dimming then handles any removed part).
+   */
+  const flowActive =
+    (flow || running) &&
+    !(eduFault && eduFault.severity !== "degraded");
+
   // A 10kΩ starves the LED branch — the dome glows dimly instead of bright.
   const dimLed = (values["r1"] ?? "").includes("10kΩ");
 
@@ -1057,7 +1247,14 @@ export default function Viewport3D({
       {parts.length > 0 && (
         <>
           <SolderJoints show={soldered} explode={explode} parts={placedParts} />
-          {style && flow && <CurrentFlow style={style} />}
+          {flowActive && (
+            <PcbCurrentFlow
+              parts={parts}
+              placed={placed}
+              active={flowActive}
+              explode={explode}
+            />
+          )}
           {style === "devkit-narrow" && <UartLeds active={flow && running} />}
           {parts.map((p) => (
             <group

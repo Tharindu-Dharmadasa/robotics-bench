@@ -6,7 +6,8 @@ import { PCB_T } from "../data/boards";
 import type { BoardSpec } from "../types/simulator";
 
 /**
- * CircuitWireOverlay — non-breaking 3D jumper-wire layer for Figs. 01–05.
+ * CircuitWireOverlay — non-breaking 3D jumper-wire layer, restricted STRICTLY
+ * to Fig. 02 (LED + resistor breadboard) and Fig. 03 (transistor switch).
  *
  * Renders arched jumper wires (TubeGeometry with black Dupont end-boots)
  * between exact pin-to-component board coordinates, and glides directional
@@ -128,7 +129,7 @@ const LOOPS: WLoop[] = [
     gate: "running",
   },
   /* ---- Fig. 03 · transistor switch: Control Path + Load Path ----
-   * Control: D9 → 1kΩ → Base → Emitter → GND (+ 10k pull-down leg)
+   * Control: D9 → 1kΩ → Base → Emitter → GND
    * Load:    12V → Relay coil → Collector → Emitter → GND
    * Flyback: Relay ↔ 1N4007 across the coil (visible only while placed)
    */
@@ -136,12 +137,6 @@ const LOOPS: WLoop[] = [
     id: "f3-control",
     fig: 3,
     needs: ["rb", "q1"],
-    gate: "d9",
-  },
-  {
-    id: "f3-pulldown",
-    fig: 3,
-    needs: ["rd", "q1"],
     gate: "d9",
   },
   {
@@ -311,76 +306,6 @@ const WIRES: WRun[] = [
     b: P("sw1", { dx: -0.14, dz: 0.14, y: 0.3 }),
   },
 
-  /* ---- Fig. 03 · Transistor switch (perfboard GND bus runs along z = −1.75) ---- */
-  // CONTROL PATH: D9 (left-edge pin) → 1kΩ base resistor → Q1 base
-  {
-    id: "f3-d9-rb",
-    loops: ["f3-control"],
-    color: YELLOW,
-    a: Pin(-2.5, 0.9, 0.45),
-    b: P("rb", { dx: -0.18, y: 0.3 }),
-  },
-  {
-    id: "f3-rb-base",
-    loops: ["f3-control"],
-    color: YELLOW,
-    a: P("rb", { dx: -0.08, dz: -0.14, y: 0.3 }),
-    b: P("q1", { dx: -0.06, dz: 0.16, y: 0.3 }),
-  },
-  // shared emitter return: Q1 emitter → GND bus (flows for control AND load loops)
-  {
-    id: "f3-e-gnd",
-    loops: ["f3-control", "f3-load"],
-    color: BLACK,
-    a: P("q1", { dx: 0.06, dz: -0.16, y: 0.3 }),
-    b: Pin(-0.85, -1.75, 0.4),
-  },
-  // 10k pull-down leg: base → R-D → GND bus
-  {
-    id: "f3-base-rd",
-    loops: ["f3-pulldown"],
-    color: GREY,
-    a: P("q1", { dx: 0.1, dz: 0.16, y: 0.3 }),
-    b: P("rd", { dx: -0.14, dz: -0.1, y: 0.3 }),
-  },
-  {
-    id: "f3-rd-gnd",
-    loops: ["f3-pulldown"],
-    color: GREY,
-    a: P("rd", { dx: 0.12, y: 0.3 }),
-    b: Pin(0.5, -1.75, 0.4),
-  },
-  // LOAD PATH: 12V screw terminal → relay coil → Q1 collector (→ emitter → GND, shared run above)
-  {
-    id: "f3-12v-k1",
-    loops: ["f3-load"],
-    color: RED,
-    a: P("p1", { dx: 0.2, y: 0.4 }),
-    b: P("k1", { dx: -0.22, dz: 0.18, y: 0.55 }),
-  },
-  {
-    id: "f3-k1-col",
-    loops: ["f3-load"],
-    color: ORANGE,
-    a: P("k1", { dx: -0.16, dz: -0.18, y: 0.55 }),
-    b: P("q1", { dx: 0.12, dz: 0.08, y: 0.3 }),
-  },
-  // flyback loop: coil terminals across to the 1N4007 (only visible while placed)
-  {
-    id: "f3-k1-d1",
-    loops: ["f3-diode"],
-    color: GREY,
-    a: P("k1", { dz: -0.24, y: 0.5 }),
-    b: P("d1", { dx: 0.14, y: 0.3 }),
-  },
-  {
-    id: "f3-d1-k1",
-    loops: ["f3-diode"],
-    color: GREY,
-    a: P("d1", { dx: -0.14, y: 0.3 }),
-    b: P("k1", { dx: 0.24, dz: 0.14, y: 0.55 }),
-  },
-
   /* ---- Fig. 04 · ESP32-S3 DevKit ---- */
   // USB-C COM → AMS1117 → WROOM module → GND header row
   {
@@ -490,13 +415,127 @@ const WIRES: WRun[] = [
   },
 ];
 
+/* ---------- Fig. 03 · four clean, low-profile jumper wires ----------
+ * Coordinates come straight from fig03.ts parts (q1 −0.9,0.35 · rb 0.45,1.1 ·
+ * rd 0.45,0.2 · d1 1.5,−0.55 · k1 1.9,0.75 · p1 −2.05,−1.25). Each wire hops
+ * at 0.24–0.32 bench units and is routed AROUND the parts — never over the
+ * 2N2222 (q1) or the 1N4007 (d1).
+ */
+
+const FIG3_TUBE_R = 0.022;
+const FIG3_BOOT_R = 0.045;
+const FIG3_BOOT_LEN = 0.14;
+
+interface Fig3Run {
+  id: string;
+  loops: string[];
+  color: string;
+  /** ordered waypoints: each consecutive pair becomes one low arch */
+  via: WNode[];
+}
+
+const FIG3_WIRES: Fig3Run[] = [
+  // W1 · amber CONTROL: D9 input pin → 1kΩ base resistor → 2N2222 base
+  {
+    id: "f3-w1-control",
+    loops: ["f3-control"],
+    color: "#f59e0b",
+    via: [
+      Pin(-2.5, 0.9, 0.45), // D9 digital pin, left bench edge
+      P("rb", { dx: -0.18, y: 0.32 }), // 1kΩ base-resistor lead
+      P("q1", { dx: -0.06, dz: 0.16, y: 0.3 }), // 2N2222 base lead
+    ],
+  },
+  // W2 · red 12V LOAD: screw terminal → relay coil → 2N2222 collector,
+  // detouring through a waypoint south of the 10k pull-down (rd) so the
+  // arch never grazes it
+  {
+    id: "f3-w2-load",
+    loops: ["f3-load"],
+    color: "#dc2626",
+    via: [
+      P("p1", { dx: 0.2, y: 0.4 }), // 12V screw terminal
+      Pin(0.45, -0.85, 0.45), // detour waypoint south of rd
+      P("k1", { dx: -0.22, dz: 0.18, y: 0.55 }), // relay coil terminal
+      P("q1", { dx: 0.12, dz: 0.08, y: 0.3 }), // 2N2222 collector lead
+    ],
+  },
+  // W3 · green FLYBACK clamp: relay coil ↔ 1N4007 (only while D1 is placed)
+  {
+    id: "f3-w3-flyback",
+    loops: ["f3-diode"],
+    color: "#16a34a",
+    via: [
+      P("k1", { dz: -0.24, y: 0.5 }), // relay coil terminal
+      P("d1", { dx: 0.14, y: 0.3 }), // 1N4007 lead
+    ],
+  },
+  // W4 · black COMMON GND: 2N2222 emitter → GND bus (z = −1.75); shared by
+  // the control and load loops, so it flows whenever either one is live
+  {
+    id: "f3-w4-gnd",
+    loops: ["f3-control", "f3-load"],
+    color: "#18181b",
+    via: [
+      P("q1", { dx: 0.06, dz: -0.16, y: 0.3 }), // 2N2222 emitter lead
+      Pin(-0.85, -1.75, 0.4), // perfboard GND bus
+    ],
+  },
+];
+
+/** One low hop (0.24–0.32 bench units) between two waypoints. */
+const fig3Hop = (A: THREE.Vector3, B: THREE.Vector3) => {
+  const mid = A.clone().lerp(B, 0.5);
+  mid.y =
+    Math.max(A.y, B.y) +
+    Math.min(0.32, Math.max(0.24, A.distanceTo(B) * 0.5));
+  return new THREE.QuadraticBezierCurve3(A, mid, B);
+};
+
+/** Build the four Fig. 03 jumpers as one chained low-arch path per wire. */
+function buildFig3Runs(resolve: (n: WNode) => THREE.Vector3): BuiltRun[] {
+  return FIG3_WIRES.map((w) => {
+    const path = new THREE.CurvePath<THREE.Vector3>();
+    let span = 0;
+    for (let i = 0; i < w.via.length - 1; i++) {
+      const A = resolve(w.via[i]);
+      const B = resolve(w.via[i + 1]);
+      span += A.distanceTo(B);
+      path.add(fig3Hop(A, B));
+    }
+    const bootQuat = (t: number) => {
+      const d = path.getTangentAt(t).normalize();
+      return new THREE.Quaternion().setFromUnitVectors(UP, d);
+    };
+    return {
+      id: w.id,
+      curve: path,
+      color: w.color,
+      loops: w.loops,
+      r: FIG3_TUBE_R,
+      bootR: FIG3_BOOT_R,
+      bootLen: FIG3_BOOT_LEN,
+      boots: [
+        { pos: path.getPointAt(0), quat: bootQuat(0) },
+        { pos: path.getPointAt(1), quat: bootQuat(1) },
+      ],
+      arrows: Math.max(1, Math.min(3, Math.round(span * 0.8))),
+    };
+  });
+}
+
 /* ---------- built geometry ---------- */
 
 interface BuiltRun {
   id: string;
-  curve: THREE.QuadraticBezierCurve3;
+  curve: THREE.Curve<THREE.Vector3>;
   color: string;
   loops: string[];
+  /** tube radius (bench units) — Fig. 03 runs are slimmer (0.022) */
+  r: number;
+  /** Dupont end-boot cross-section / length */
+  bootR: number;
+  bootLen: number;
   /** black Dupont end-boots: position + tangent-aligned orientation */
   boots: { pos: THREE.Vector3; quat: THREE.Quaternion }[];
   /** arrow count scales with span */
@@ -513,7 +552,7 @@ function FlowArrows({
   active,
   count,
 }: {
-  curve: THREE.QuadraticBezierCurve3;
+  curve: THREE.Curve<THREE.Vector3>;
   active: boolean;
   count: number;
 }) {
@@ -545,8 +584,8 @@ function FlowArrows({
   return (
     <group ref={grp} visible={false}>
       {Array.from({ length: count }).map((_, i) => (
-        <mesh key={i}>
-          <coneGeometry args={[0.05, 0.16, 10]} />
+        <mesh key={i} scale={0.055}>
+          <coneGeometry args={[1, 2.5, 10]} />
           <meshStandardMaterial
             color="#ffcf5c"
             emissive="#ff9d1a"
@@ -576,16 +615,27 @@ export interface CircuitWireOverlayProps {
   d9Energized: boolean;
 }
 
-export default function CircuitWireOverlay({
+/**
+ * Strict lab gate: 3D arched jumper wires exist ONLY on Fig. 02 (LED +
+ * resistor breadboard lab) and Fig. 03 (transistor switch lab). Every other
+ * board — Fig. 01, Fig. 04, Fig. 05 and Figs. 06–13 — renders zero wires.
+ */
+export default function CircuitWireOverlay(props: CircuitWireOverlayProps) {
+  const board = props.spec.id - 1; // zero-based bench board index
+  if (board !== 1 && board !== 2) return null;
+  return <BreadboardWireOverlay {...props} board={board} />;
+}
+
+function BreadboardWireOverlay({
+  board,
   spec,
   placed,
   powered,
   running,
   blink,
   d9Energized,
-}: CircuitWireOverlayProps) {
-  const fig = spec.id;
-  
+}: CircuitWireOverlayProps & { board: number }) {
+  const fig = board + 1; // zero-based board index → 1-based fig number
 
   /** part id → board x/z anchor */
   const anchor = useMemo(() => {
@@ -603,6 +653,8 @@ export default function CircuitWireOverlay({
         (a ? a[1] : 0) + (n.dz ?? 0) + (n.z ?? 0),
       );
     };
+    // Fig. 03: four tidy low-profile jumpers (see FIG3_WIRES)
+    if (fig === 3) return buildFig3Runs(resolve);
     const loopFig = new Map<string, number>(LOOPS.map((l) => [l.id, l.fig]));
     const out: BuiltRun[] = [];
     WIRES.forEach((w) => {
@@ -623,6 +675,9 @@ export default function CircuitWireOverlay({
         curve,
         color: w.color,
         loops: w.loops,
+        r: WIRE_R,
+        bootR: BOOT_R,
+        bootLen: BOOT_LEN,
         boots: [
           { pos: curve.getPointAt(0), quat: bootQuat(0) },
           { pos: curve.getPointAt(1), quat: bootQuat(1) },
@@ -663,7 +718,7 @@ export default function CircuitWireOverlay({
         return (
           <group key={`${fig}-${r.id}`}>
             <mesh>
-              <tubeGeometry args={[r.curve, 40, WIRE_R, 8, false]} />
+              <tubeGeometry args={[r.curve, 48, r.r, 8, false]} />
               <meshStandardMaterial
                 color={r.color}
                 roughness={0.55}
@@ -672,7 +727,7 @@ export default function CircuitWireOverlay({
             </mesh>
             {r.boots.map((b, i) => (
               <mesh key={`boot-${i}`} position={b.pos} quaternion={b.quat}>
-                <cylinderGeometry args={[BOOT_R, BOOT_R, BOOT_LEN, 10]} />
+                <cylinderGeometry args={[r.bootR, r.bootR, r.bootLen, 10]} />
                 <meshStandardMaterial
                   color="#141412"
                   roughness={0.45}
