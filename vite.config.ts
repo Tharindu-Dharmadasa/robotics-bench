@@ -8,12 +8,22 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), tailwindcss(), viteSingleFile()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "src"),
+// Export a function to access the Vite mode
+export default defineConfig(({ mode }) => {
+  const plugins = [react(), tailwindcss()];
+  if (mode === "singlefile") {
+    plugins.push(viteSingleFile());
+  }
+
+  return {
+    plugins,
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "src"),
+      },
     },
-  },
+    worker: {
+      format: "es",
+    },
+  };
 });
