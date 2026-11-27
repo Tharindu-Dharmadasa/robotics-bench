@@ -21,7 +21,7 @@ describe("(a) ProgramRuntimeContext keys", () => {
       | "writePinMode"
       | "writeDigitalOut"
       | "writePwmOut"
-      | "pulseInUs_BROKEN"
+      | "pulseInUs"
     >();
   });
 });

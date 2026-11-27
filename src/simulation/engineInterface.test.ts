@@ -63,7 +63,7 @@ describe("(c) no step member", () => {
   it("neither IWorkerSimulationEngine nor IEngineClient has step", () => {
     expectTypeOf<
       "step" extends keyof IWorkerSimulationEngine ? true : false
-    >().toEqualTypeOf<true>();
+    >().toEqualTypeOf<false>();
     expectTypeOf<
       "step" extends keyof IEngineClient ? true : false
     >().toEqualTypeOf<false>();

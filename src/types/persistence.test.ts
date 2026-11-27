@@ -584,7 +584,7 @@ describe("(j) compile-time type parity with circuit.ts", () => {
     type InferredPlacedComponent = z.infer<typeof placedComponentSchema>;
     type InferredJumperWire = z.infer<typeof jumperWireSchema>;
 
-    expectTypeOf<InferredPlacedComponent>().toEqualTypeOf<JumperWire>();
+    expectTypeOf<InferredPlacedComponent>().toEqualTypeOf<PlacedComponent>();
     expectTypeOf<InferredJumperWire>().toEqualTypeOf<JumperWire>();
   });
 });
