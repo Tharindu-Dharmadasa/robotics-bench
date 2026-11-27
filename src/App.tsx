@@ -20,7 +20,7 @@ import { getBoardTelemetryLine } from "./data/telemetry";
 import { oledBench } from "./components/boards/Fig12Oled";
 import { fusionBench } from "./components/boards/Fig13Fusion";
 import type { BoardSpec, FaultRule, Part, PartEffect, SimStatus } from "./types/simulator";
-import CustomLabWorkspace from "./customLab/CustomLabWorkspace";
+
 
 /**
  * ~60% of a board's parts arrive pre-placed so every lab renders immediately.
@@ -47,7 +47,7 @@ const effectTag = (severity: PartEffect["severity"]) =>
 export default function App() {
   const [board, setBoard] = useState(0);
   /** Custom Experiment Bench (sandbox) open — replaces the standard board stage. */
-  const [showCustomLab, setShowCustomLab] = useState(false);
+  // Removed old sandbox prototype state
   const [placed, setPlaced] = useState<Set<string>>(() =>
     initialPlaced(BOARD_SPECS[0]),
   );
@@ -153,7 +153,7 @@ export default function App() {
     if (!spec) return;
     setBoard(index);
     // Selecting a real board leaves the sandbox and returns to the bench.
-    setShowCustomLab(false);
+
     setPlaced(initialPlaced(spec));
     setSoldered(false);
     setUsb(false);
@@ -742,8 +742,7 @@ export default function App() {
       <Sidebar
         board={board}
         onSelect={selectBoard}
-        customBench={showCustomLab}
-        onCustomBench={() => setShowCustomLab(true)}
+
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -792,7 +791,7 @@ export default function App() {
             onInstrumentLog={log}
           />
 
-          {!showCustomLab && (
+          
             <Viewport3D
               spec={activeBoard}
               parts={parts}
@@ -827,7 +826,7 @@ export default function App() {
               }
               targetDistance={targetDistance}
             />
-          )}
+          
         </div>
 
         <BottomPanels
@@ -840,11 +839,7 @@ export default function App() {
         />
       </main>
 
-      {/* Full-screen Custom Experiment Sandbox overlay — hides the 13-lab
-          sidebar and bottom panels so the 3D breadboard gets the whole window. */}
-      {showCustomLab && (
-        <CustomLabWorkspace onClose={() => setShowCustomLab(false)} />
-      )}
+      
     </div>
   );
 }
