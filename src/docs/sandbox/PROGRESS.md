@@ -9,11 +9,11 @@
 
 ## Building now
 
-Task 1.2c — `src/utils/breadboardGrid.ts` (**Blocked** on `anchorHole` decision)
+Task 1.2c — `src/utils/breadboardGrid.ts` (**In progress:** 1.2c-i done; 1.2c-ii, 1.2c-iii pending)
 
 ## Next up
 
-1. Task 1.2c — `src/utils/breadboardGrid.ts` (**Blocked:** awaiting `anchorHole` decision)
+1. Task 1.2c-ii / 1.2c-iii — `src/utils/breadboardGrid.ts` (3D offsets, hit-testing, rotated AABB; awaiting `anchorHole` decision for 1.2c-iii)
 2. Task 1.2d — `src/utils/manifestValidation.ts`, `src/test/fixtures.ts`
 3. Task 1.3 — `src/simulation/unionFindNetlist.ts`
 
@@ -35,6 +35,10 @@ Task 1.2c — `src/utils/breadboardGrid.ts` (**Blocked** on `anchorHole` decisio
   - Files created: `src/types/program.ts`, `src/types/persistence.ts`, `src/simulation/engineInterface.ts`, `src/types/program.test.ts`, `src/types/persistence.test.ts`, `src/simulation/engineInterface.test.ts`.
   - Tests: 26 new tests passing (`program.test.ts` 4, `persistence.test.ts` 18, `engineInterface.test.ts` 4; 54 total across 5 test files).
   - Verification: `npm run build`, `npm run lint`, `npm run typecheck`, and `npm run test` all pass. Proved `expectTypeOf` is checked by `tsc --noEmit` via deliberate break/revert in all three test files.
+- **Task 1.2c-i — `src/utils/breadboardGrid.ts` (address, bounds, strips)** (Status: Done; part 1 of 3)
+  - Files created: `src/utils/breadboardGrid.ts`, `src/utils/breadboardGrid.test.ts`.
+  - Tests: 9 new tests passing (63 total across 6 test files).
+  - Verification: `npm run build`, `npm run lint`, `npm run typecheck`, and `npm run test` all pass, plus ESLint pure-utils boundary proof with `Get-FileHash`.
 
 ## Blocked / needs my input
 
@@ -52,7 +56,7 @@ Task 1.2c — `src/utils/breadboardGrid.ts` (**Blocked** on `anchorHole` decisio
 | 1.1  | Deps, folders, ESLint import guards                              | **Done**    | 1/1   | `trivial.test.ts` + a/b/c boundary proofs                                        |
 | 1.2a | `types/circuit.ts`                                               | Done        | 27/27 | circuit.test.ts                                                                  |
 | 1.2b | `types/program.ts`, `types/persistence.ts`, `engineInterface.ts` | **Done**    | 26/26 | `program.test.ts` (4), `persistence.test.ts` (18), `engineInterface.test.ts` (4) |
-| 1.2c | `utils/breadboardGrid.ts`                                        | **Blocked** |       | Blocked on `anchorHole` decision                                                 |
+| 1.2c | `utils/breadboardGrid.ts`                                        | **In progress** | 9/9   | 1.2c-i done (address, bounds, strips); 1.2c-ii, 1.2c-iii pending                 |
 | 1.2d | `utils/manifestValidation.ts`, `test/fixtures.ts`                | Not started |       |                                                                                  |
 | 1.3  | `unionFindNetlist.ts` (DSU nets + conductor graph)               | Not started |       |                                                                                  |
 | 1.4  | `dcNodalSolver.ts` (criteria a–i)                                | Not started |       |                                                                                  |
