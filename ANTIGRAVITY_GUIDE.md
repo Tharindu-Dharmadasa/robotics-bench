@@ -7,21 +7,23 @@ Companion files: `RULES.md`, `ARCHITECTURE.md`, `TASKS.md`, `PROGRESS.md`.
 
 ## 1. One-time setup (do this before Task 0)
 
-1. Put the four docs in the repo at `docs/sandbox/` (`RULES.md`, `ARCHITECTURE.md`, `TASKS.md`, `PROGRESS.md`). Commit them.
+1. Put the four docs in the repo at `src/docs/sandbox/` (`RULES.md`, `ARCHITECTURE.md`, `TASKS.md`, `PROGRESS.md`). Commit them.
 2. Create a branch: `git checkout -b feature/sandbox`.
 3. Make sure your baseline is green first: `npm run build` (and lint/tests if they exist). If the baseline is already red, fix or note it before starting, or you will not know who broke what.
 4. Optional but recommended: add the workspace rule below so every Antigravity session loads it automatically. Antigravity reads workspace rules from `.agent/rules/`; if your version stores them elsewhere, paste the text into its Rules setting instead.
 
 ```md
 <!-- .agent/rules/sandbox.md -->
+
 # Sandbox feature rules
-- Source of truth: docs/sandbox/ARCHITECTURE.md §5.6 (normative) > docs/sandbox/RULES.md > docs/sandbox/TASKS.md.
+
+- Source of truth: src/docs/sandbox/ARCHITECTURE.md §5.6 (normative) > src/docs/sandbox/RULES.md > src/docs/sandbox/TASKS.md.
 - If docs conflict or a detail is unspecified, STOP and ask. Never guess.
 - Work on exactly one task per session. Do not start the next task.
 - Write a plan first and wait for approval before editing files.
 - Never edit a failing test to make it pass without explaining why the test was wrong and getting approval.
 - Never import three/react/store/components/zustand/zundo/idb-keyval into src/types, src/registry, src/simulation (see RULES.md rule 8).
-- Finish every task by running: npm run build && npm run lint && npx vitest --run, then update docs/sandbox/PROGRESS.md.
+- Finish every task by running: npm run build && npm run lint && npm run typecheck && npm run test, then update src/docs/sandbox/PROGRESS.md.
 ```
 
 ---
@@ -32,7 +34,7 @@ Companion files: `RULES.md`, `ARCHITECTURE.md`, `TASKS.md`, `PROGRESS.md`.
 2. Paste the **Master Prompt** (below), then the **task prompt**.
 3. Use Planning mode. **Read the plan before approving.** Check: right files, tests listed, nothing outside the task.
 4. Let it implement. Don't interrupt unless it leaves scope.
-5. **Run the checks yourself** in a terminal: `npm run build && npm run lint && npx vitest --run`. Do not trust "all tests pass" in the chat.
+5. **Run the checks yourself** in a terminal: `npm run build && npm run lint && npm run typecheck && npm run test`. Do not trust "all tests pass" in the chat.
 6. Review the diff with the checklist in §4.
 7. Confirm `PROGRESS.md` was updated (see §5), then `git commit -m "task 1.3: DSU net builder"`.
 8. Only then move to the next task.
@@ -43,10 +45,10 @@ Companion files: `RULES.md`, `ARCHITECTURE.md`, `TASKS.md`, `PROGRESS.md`.
 You are implementing ONE task of the Robotics Bench Sandbox inside an EXISTING codebase.
 
 Read first, in this order:
-1. docs/sandbox/RULES.md
-2. the sections of docs/sandbox/ARCHITECTURE.md that I name below
-3. the task I name in docs/sandbox/TASKS.md
-4. docs/sandbox/PROGRESS.md
+1. src/docs/sandbox/RULES.md
+2. the sections of src/docs/sandbox/ARCHITECTURE.md that I name below
+3. the task I name in src/docs/sandbox/TASKS.md
+4. src/docs/sandbox/PROGRESS.md
 
 Precedence if documents disagree: ARCHITECTURE §5.6 > RULES.md > TASKS.md.
 If anything is ambiguous or unspecified, STOP and ask me. Do not guess.
@@ -58,8 +60,8 @@ Process:
 1. Write a short plan (files to create/change, tests to write, risks). Wait for my approval.
 2. Where the task says Vitest, write the tests FIRST, then implement.
 3. Implement.
-4. Run `npm run build`, `npm run lint`, `npx vitest --run` and show me the real output.
-5. Update docs/sandbox/PROGRESS.md: move the task, list files created, decisions made, open issues.
+4. Run npm run build, lint, typecheck, test and show me the real output.
+5. Update src/docs/sandbox/PROGRESS.md: move the task, list files created, decisions made, open issues.
 6. Summarize what changed and stop.
 
 Never edit a failing test to make it pass unless you explain why the test was wrong and I approve.
@@ -76,7 +78,7 @@ Replace nothing in these; paste after the Master Prompt.
 Why: this is an existing project. Before adding `src/types`, `src/store`, etc., you need to know what already exists so nothing collides.
 
 ```text
-TASK 0: Read-only audit. Do NOT change any file except docs/sandbox/PROGRESS.md.
+TASK 0: Read-only audit. Do NOT change any file except src/docs/sandbox/PROGRESS.md.
 Report, under a "Repo audit" heading in PROGRESS.md:
 - package.json: React, TypeScript, Vite, three, @react-three/fiber, @react-three/drei versions; existing scripts
 - Is TypeScript strict? Path aliases (tsconfig/vite)?
@@ -84,7 +86,7 @@ Report, under a "Repo audit" heading in PROGRESS.md:
 - Test setup (vitest/jest present? config?)
 - Existing folders that collide with: src/types, src/registry, src/simulation, src/store, src/utils, src/components/workbench|hud|devtools
 - Any existing zustand/state usage and any existing R3F <Canvas> / OrbitControls setup I could reuse
-- Anything in the existing app that conflicts with docs/sandbox/ARCHITECTURE.md §2 (React 19, R3F v9)
+- Anything in the existing app that conflicts with src/docs/sandbox/ARCHITECTURE.md §2 (React 19, R3F v9)
 End with a list of risks and questions for me. Make no code changes.
 ```
 
@@ -457,7 +459,7 @@ Report real measured numbers, not estimates.
 ## 4. Review checklist (use after every task)
 
 - [ ] Only files named in the plan changed. `git diff --stat` has no surprises.
-- [ ] `npm run build && npm run lint && npx vitest --run` pass **on your machine**.
+- [ ] `npm run build && npm run lint && npm run typecheck && npm run test` pass **on your machine**.
 - [ ] No `NaN`, `any`, `@ts-ignore`, or skipped/`.only` tests added.
 - [ ] No banned imports (lint proves it). No `requestAnimationFrame` in `src/simulation/`.
 - [ ] Names and constants match the docs (`SHORT_OHM`, `FIXED_DT_SEC`, `MAX_SUBSTEPS`, …), not renamed.
@@ -469,7 +471,7 @@ Report real measured numbers, not estimates.
 The Master Prompt makes the agent update it. Check it yourself every time. If a session ended abruptly, use:
 
 ```text
-Update docs/sandbox/PROGRESS.md to match reality: run git status and git diff --stat, run the checks, then set each task's status
+Update src/docs/sandbox/PROGRESS.md to match reality: run git status and git diff --stat, run the checks, then set each task's status
 (Not started / In progress / Done / Blocked) and list what is actually finished vs. missing. Do not mark anything Done unless its acceptance criteria pass.
 ```
 
