@@ -9,13 +9,13 @@
 
 ## Building now
 
-_(ready for Task 1.2a)_
+Task 1.2b — `src/types/program.ts`, `src/types/persistence.ts`, `src/simulation/engineInterface.ts`
 
 ## Next up
 
-1. Task 1.2a — `src/types/circuit.ts`
-2. Task 1.2b — program/persistence types + engine interface
-3. Task 1.2c — `src/utils/breadboardGrid.ts`
+1. Task 1.2b — program/persistence types + engine interface
+2. Task 1.2c — `src/utils/breadboardGrid.ts`
+3. Task 1.2d — `src/utils/manifestValidation.ts`, `src/test/fixtures.ts`
 
 ## Done
 
@@ -27,6 +27,10 @@ _(ready for Task 1.2a)_
   - Files created/updated: `vite.config.ts` (`PluginOption[]` typing, conditional `singlefile` mode, `@` alias, `worker.format: "es"`), `eslint.config.js` (ESLint 9 flat config with `typescript-eslint`, `@eslint/js`, `globals`, `eslint-plugin-react-hooks`, and `no-restricted-imports` boundary rules a, b, c), `src/test/trivial.test.ts`, `vitest.config.ts`, `package.json` (`lint`, `typecheck`, `test` scripts and Phase 1 deps).
   - Decisions: Scoped 3 noisy rules on legacy files (`no-irregular-whitespace` in `src/components/Batch23Geometry.tsx`, `react-hooks/rules-of-hooks` in `src/components/PartGeometry.tsx`, `no-useless-escape` in `src/customLab/**`) so baseline lint passes without modifying existing app files. Combined `no-restricted-imports` rules for overlapping layers (`src/types/**`, `src/registry/**`, `src/simulation/**` and pure `src/utils/*`) so flat-config blocks do not overwrite each other.
   - Verification: Proven all 3 boundary rules (a, b, c) fail on temporary violating files, deleted all temporary files (including `src/components/tmpViolation1.ts`), and verified `npm run build`, `npm run lint`, `npm run typecheck`, and `npm run test` all pass.
+- **Task 1.2a — `src/types/circuit.ts`** (Status: Done)
+  - Files created: `src/types/circuit.ts`, `src/types/circuit.test.ts`.
+  - Tests: 27 passing (8 describe blocks: constants, FAULT_ORDER, FAULT_PRECEDENCE_LEVEL, PinDefinition narrowing, ComponentElectricalModel narrowing, ComponentPlacement narrowing, PinRef + CircuitFaultKind, NetDescriptor + SimulationFrameOutput).
+  - Verification: `npm run build`, `npm run lint`, `npm run typecheck`, and `npm run test` all pass. Proved `expectTypeOf` is checked by `tsc --noEmit` via deliberate break/revert of `quarterTurns` type assertion.
 
 ## Blocked / needs my input
 
