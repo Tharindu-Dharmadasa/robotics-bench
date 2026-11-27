@@ -40,8 +40,9 @@ void loop() {
         name: "Jumper wire (5V)",
         kind: "jumper",
         smd: false,
-        p: [-1.55, 0.85],
-        color: "#d64b3a",
+        // switch-input socket where the red 5 V cable lands
+        p: [-1.18, -0.72],
+        color: "#dc2626",
         rot: Math.PI / 2,
         label: "+5V",
         onRemoveEffect: {
@@ -55,8 +56,9 @@ void loop() {
         name: "Jumper wire (GND)",
         kind: "jumper",
         smd: false,
-        p: [-1.55, -0.85],
-        color: "#22252a",
+        // LED-cathode socket where the black GND cable returns
+        p: [0.78, -0.38],
+        color: "#18181b",
         rot: Math.PI / 2,
         label: "GND",
         onRemoveEffect: {
@@ -70,8 +72,9 @@ void loop() {
         name: "Jumper wire (signal)",
         kind: "jumper",
         smd: false,
-        p: [0.55, 0.9],
-        color: "#e0b33a",
+        // switch-output socket where the amber signal cable starts
+        p: [-0.88, -0.38],
+        color: "#f59e0b",
         label: "SIG",
         onRemoveEffect: {
           severity: "degraded",
@@ -84,7 +87,7 @@ void loop() {
         name: "220Ω resistor",
         kind: "res",
         smd: false,
-        p: [-0.35, 0.35],
+        p: [-0.25, -0.38],
         value: "220Ω",
         label: "R1 · red-red-brown",
         valueOptions: ["220Ω (Safe)", "10Ω (Too Low)", "10kΩ (Dim)"],
@@ -113,7 +116,7 @@ void loop() {
         name: "5mm red LED",
         kind: "led",
         smd: false,
-        p: [0.55, 0.35],
+        p: [0.68, -0.38],
         color: "#ff4136",
         label: "LED",
         onRemoveEffect: {
@@ -127,7 +130,7 @@ void loop() {
         name: "Tactile switch",
         kind: "btn",
         smd: false,
-        p: [0.95, -0.6],
+        p: [-1.05, 0],
         label: "SW1",
         onRemoveEffect: {
           severity: "degraded",
@@ -140,7 +143,7 @@ void loop() {
         name: "100nF cap",
         kind: "cap",
         smd: true,
-        p: [-0.35, -0.6],
+        p: [-1.55, -0.72],
         value: "100nF",
         label: "C1",
         onRemoveEffect: {

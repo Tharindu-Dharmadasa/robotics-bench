@@ -393,34 +393,29 @@ export function Geo({
         </group>
       );
     case "jumper":
-      // breadboard jumper wire: colored flexible lead arcing between pins
+      // Slim vertical Dupont pin plug seated in a breadboard socket. The arched
+      // cable itself is drawn by CircuitWireOverlay; this is just the end plug.
       return (
         <group>
-          {/* plastic caps at both ends */}
-          {[-0.55, 0.55].map((x) => (
-            <group key={x}>
-              <mesh position={[x, 0.07, 0]} castShadow>
-                <boxGeometry args={[0.2, 0.14, 0.2]} />
-                <meshStandardMaterial
-                  color={part.color ?? "#d64b3a"}
-                  roughness={0.55}
-                />
-              </mesh>
-              <mesh position={[x, 0.02, 0]}>
-                <cylinderGeometry args={[0.018, 0.018, 0.1, 8]} />
-                <meshStandardMaterial
-                  color={metal}
-                  metalness={0.9}
-                  roughness={0.3}
-                />
-              </mesh>
-            </group>
-          ))}
-          {/* flexible lead: half-torus arc bowing upward between the caps */}
-          <mesh position={[0, 0.07, 0]}>
-            <torusGeometry args={[0.55, 0.026, 8, 32, Math.PI]} />
+          {/* thin gold pin descending into the breadboard hole */}
+          <mesh position={[0, 0.02, 0]}>
+            <cylinderGeometry args={[0.016, 0.016, 0.12, 8]} />
             <meshStandardMaterial
-              color={part.color ?? "#d64b3a"}
+              color="#d4af37"
+              metalness={0.9}
+              roughness={0.3}
+            />
+          </mesh>
+          {/* slim vertical Dupont connector boot — never a wide block */}
+          <mesh position={[0, 0.13, 0]} castShadow>
+            <boxGeometry args={[0.052, 0.15, 0.052]} />
+            <meshStandardMaterial color="#18181b" roughness={0.55} />
+          </mesh>
+          {/* thin colored heat-shrink collar at the top of the boot */}
+          <mesh position={[0, 0.205, 0]}>
+            <boxGeometry args={[0.056, 0.04, 0.056]} />
+            <meshStandardMaterial
+              color={part.color || "#dc2626"}
               roughness={0.6}
             />
           </mesh>
@@ -2204,7 +2199,7 @@ const paintStyleSurface: Record<BoardStyleName, StylePainter> = {
   /* ---- Fig. 02 · 170-point solderless breadboard ---- */
   breadboard: (ctx, t) => {
     const { U, H, col, X, Z, rng } = t;
-    // cream ABS body
+    // cream ABS body with fine moulded grain
     ctx.fillStyle = col("#f0ede2", 0.62);
     ctx.fillRect(0, 0, U, H);
     for (let i = 0; i < 9000; i++) {
@@ -2212,26 +2207,46 @@ const paintStyleSurface: Record<BoardStyleName, StylePainter> = {
         rng() < 0.5 ? col("#ffffff", 0.6, 0.06) : col("#b8b2a2", 0.62, 0.05);
       ctx.fillRect(rng() * U, rng() * H, 2, 2);
     }
-    // central DIP channel (recessed groove across the middle)
-    ctx.fillStyle = col("#c9c4b4", 0.5);
+
+    // deeper central DIP channel: bevel, shadowed walls and a dark trough
+    ctx.fillStyle = col("#d3cebe", 0.5);
+    ctx.fillRect(0, Z(-0.25), U, Z(0.25) - Z(-0.25));
+    ctx.fillStyle = col("#9a9485", 0.48);
     ctx.fillRect(0, Z(-0.19), U, Z(0.19) - Z(-0.19));
-    ctx.fillStyle = col("#8f8a7c", 0.45);
-    ctx.fillRect(0, Z(-0.09), U, Z(0.09) - Z(-0.09));
+    ctx.fillStyle = col("#5d594f", 0.74);
+    ctx.fillRect(0, Z(-0.115), U, Z(0.115) - Z(-0.115));
+    ctx.fillStyle = col("#ffffff", 0.55, 0.45);
+    ctx.fillRect(0, Z(-0.255), U, 3);
+    ctx.fillRect(0, Z(0.25), U, 3);
+
+    /** One recessed square socket: moulded collar, dark mouth, spring clip. */
+    const socket = (x: number, z: number) => {
+      const px = X(x);
+      const pz = Z(z);
+      ctx.fillStyle = col("#d8d3c2", 0.5);
+      ctx.fillRect(px - 10, pz - 10, 20, 20);
+      ctx.fillStyle = col("#24221e", 0.8);
+      ctx.fillRect(px - 6.5, pz - 6.5, 13, 13);
+      // two tinned spring leaves catching the light inside the hole
+      ctx.fillStyle = col("#aeb3b8", 0.3, 0.95);
+      ctx.fillRect(px - 4, pz - 4.5, 3, 9);
+      ctx.fillRect(px + 1, pz - 4.5, 3, 9);
+      ctx.fillStyle = col("#eceff1", 0.28, 0.7);
+      ctx.fillRect(px - 4, pz - 4.5, 1.2, 9);
+      ctx.fillRect(px + 1, pz - 4.5, 1.2, 9);
+    };
+
     // tie-point grid: 2 banks of 5 rows × 17 columns
     const pitchX = 0.262;
     const x0 = -(16 * pitchX) / 2;
     for (let c = 0; c < 17; c++) {
       for (let r = 0; r < 5; r++) {
         for (const s of [1, -1]) {
-          const x = X(x0 + c * pitchX);
-          const z = Z(s * (0.36 + r * 0.25));
-          ctx.fillStyle = col("#ddd8c8", 0.42);
-          ctx.fillRect(x - 7, z - 7, 14, 14);
-          ctx.fillStyle = col("#6f6a5e", 0.38);
-          ctx.fillRect(x - 3.5, z - 3.5, 7, 7);
+          socket(x0 + c * pitchX, s * (0.36 + r * 0.25));
         }
       }
     }
+
     // power rails: red (+) and blue (−) stripes with their own tie rows
     for (const s of [1, -1]) {
       const zLine = Z(s * 1.44);
@@ -2247,15 +2262,32 @@ const paintStyleSurface: Record<BoardStyleName, StylePainter> = {
       // rail tie rows (two rows flanking each stripe)
       for (let c = 0; c < 20; c++) {
         for (const dz of [0.17, 0.3]) {
-          const x = X(-2.28 + c * 0.24);
-          const z = Z(s * (1.44 + dz));
-          ctx.fillStyle = col("#ddd8c8", 0.42);
-          ctx.fillRect(x - 7, z - 7, 14, 14);
-          ctx.fillStyle = col("#6f6a5e", 0.38);
-          ctx.fillRect(x - 3.5, z - 3.5, 7, 7);
+          socket(-2.28 + c * 0.24, s * (1.44 + dz));
         }
       }
     }
+
+    // crisp moulded column numbers 1–17 on both long edges
+    ctx.font = "700 22px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = col("#4a463d", 0.66);
+    for (let c = 0; c < 17; c++) {
+      const px = X(x0 + c * pitchX);
+      ctx.fillText(String(c + 1), px, 17);
+      ctx.fillText(String(c + 1), px, H - 17);
+    }
+
+    // crisp moulded row letters A–E / F–J down both short edges
+    ctx.font = "700 24px Arial";
+    for (const side of [-1, 1]) {
+      const px = X(side * 2.22);
+      for (let r = 0; r < 5; r++) {
+        ctx.fillText(String.fromCharCode(65 + r), px, Z(0.36 + r * 0.25));
+        ctx.fillText(String.fromCharCode(70 + r), px, Z(-(0.36 + r * 0.25)));
+      }
+    }
+
     // molded edge highlights
     ctx.strokeStyle = col("#ffffff", 0.55, 0.5);
     ctx.lineWidth = 6;
@@ -3060,7 +3092,7 @@ function TiePoints() {
     if (!mesh) return;
     const m = new THREE.Matrix4();
     pts.forEach(([x, z], i) => {
-      m.setPosition(x, PCB_T / 2 + 0.012, z);
+      m.setPosition(x, PCB_T / 2 + 0.008, z);
       mesh.setMatrixAt(i, m);
     });
     mesh.instanceMatrix.needsUpdate = true;
@@ -3072,9 +3104,80 @@ function TiePoints() {
       receiveShadow
       castShadow
     >
-      <boxGeometry args={[0.15, 0.05, 0.15]} />
-      <meshStandardMaterial color="#8a8a80" metalness={0.85} roughness={0.35} />
+      {/* small spring clip seated inside each dark recessed socket mouth */}
+      <boxGeometry args={[0.042, 0.016, 0.042]} />
+      <meshStandardMaterial color="#b7bbc0" metalness={0.92} roughness={0.3} />
     </instancedMesh>
+  );
+}
+
+/**
+ * Docked 5V / D13 / GND power & GPIO breakout. A mini blue PCB butted against
+ * the breadboard's left edge, its three gold-rimmed female Dupont sockets at
+ * world [-2.35, -0.55], [-2.35, 0] and [-2.35, +0.55] — real hardware targets
+ * for the Fig. 02 jumper boots instead of empty bench space.
+ */
+function PowerHeaderDock() {
+  const sockets: { z: number; tint: string }[] = [
+    { z: -0.55, tint: "#dc2626" }, // 5V
+    { z: 0, tint: "#f59e0b" }, // D13
+    { z: 0.55, tint: "#18181b" }, // GND
+  ];
+  // group sits at x = -2.6, so local x = +0.25 lands exactly on world x = -2.35
+  const socketX = 0.25;
+  return (
+    <group position={[-2.6, 0, 0]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[0.62, PCB_T, 1.72]} />
+        <meshStandardMaterial
+          color="#1450a0"
+          roughness={0.45}
+          metalness={0.12}
+        />
+      </mesh>
+      {sockets.map(({ z, tint }) => (
+        <group key={z} position={[socketX, 0, z]}>
+          {/* black female Dupont housing, top flush with the board surface */}
+          <mesh position={[0, 0.041, 0]} castShadow>
+            <boxGeometry args={[0.19, 0.088, 0.19]} />
+            <meshStandardMaterial color="#0e0e10" roughness={0.6} />
+          </mesh>
+          {/* recessed contact well */}
+          <mesh
+            position={[0, PCB_T / 2 + 0.006, 0]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <circleGeometry args={[0.052, 20]} />
+            <meshStandardMaterial color="#120f08" roughness={0.85} />
+          </mesh>
+          {/* gold-rimmed socket mouth */}
+          <mesh
+            position={[0, PCB_T / 2 + 0.008, 0]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <ringGeometry args={[0.052, 0.078, 20]} />
+            <meshStandardMaterial
+              color="#d4af37"
+              metalness={0.95}
+              roughness={0.22}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          {/* tiny colour key dot on the silkscreen beside each socket */}
+          <mesh
+            position={[0, PCB_T / 2 + 0.01, 0.14]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <circleGeometry args={[0.024, 12]} />
+            <meshStandardMaterial
+              color={tint}
+              emissive={tint}
+              emissiveIntensity={0.35}
+            />
+          </mesh>
+        </group>
+      ))}
+    </group>
   );
 }
 
@@ -3357,7 +3460,12 @@ export function Pcb({
           </mesh>
         </group>
       )}
-      {style === "breadboard" && <TiePoints />}
+      {style === "breadboard" && (
+        <>
+          <TiePoints />
+          <PowerHeaderDock />
+        </>
+      )}
     </group>
   );
 }

@@ -12,8 +12,9 @@ import type { BoardSpec } from "../types/simulator";
  * Renders arched jumper wires (TubeGeometry with black Dupont end-boots)
  * between exact pin-to-component board coordinates, and glides directional
  * arrow cones along each wire (rotated along curve.getTangentAt(t)) whenever
- * that specific loop is electrically closed and energized. Remove any part a
- * loop needs and its wires + arrows stop immediately.
+ * that specific loop is electrically closed and energized. On Fig. 02 each
+ * coloured cable is owned by exactly one jumper part, so removing that wire in
+ * the Parts checklist hides its cable instantly and opens the loop.
  *
  * AGENTS.md rule 1: pure procedural three.js — no <Html>/<Text> inside <Canvas>.
  */
@@ -85,6 +86,111 @@ const P = (part: string, o: Partial<WNode> = {}): WNode => ({
 });
 /** Absolute pin / rail / bus node (e.g. a header pin or breadboard power rail). */
 const Pin = (x: number, z: number, y = 0.5): WNode => ({ x, z, y });
+
+/** Breadboard socket plane: top face of the 0.16-thick board. */
+const SOCKET_Y = PCB_T / 2; // 0.08
+
+/* ---------- Fig. 02 · three flush-seated jumper wires ----------
+ * Every endpoint is an exact socket coordinate on the bench plane (y = 0.08):
+ * the docked blue header's 5V/GND sockets and the breadboard tie-points around
+ * the switch, resistor and LED. No wire end floats above empty space.
+ */
+const FIG2_TUBE_R = 0.024;
+const FIG2_BOOT_R = 0.038;
+const FIG2_BOOT_LEN = 0.11;
+
+interface Fig2Run {
+  id: string;
+  /** jumper part that owns this cable — visibility follows placed.has(part) */
+  part: string;
+  loops: string[];
+  color: string;
+  /** ordered socket waypoints; each consecutive pair becomes one low arch */
+  via: WNode[];
+}
+
+const FIG2_WIRES: Fig2Run[] = [
+  // Red: docked 5V socket → tactile-switch input hole
+  {
+    id: "b2-5v-switch",
+    part: "j1", // Jumper wire (5V)
+    loops: ["bb-led"],
+    color: "#dc2626",
+    via: [
+      { x: -2.35, z: -0.55, y: SOCKET_Y }, // docked 5V
+      { x: -1.18, z: -0.72, y: SOCKET_Y }, // switch input
+    ],
+  },
+  // Amber: switch output hole → 220Ω left hole
+  {
+    id: "b2-switch-res",
+    part: "j3", // Jumper wire (signal)
+    loops: ["bb-sig"],
+    color: "#f59e0b",
+    via: [
+      { x: -0.88, z: -0.38, y: SOCKET_Y }, // switch output
+      { x: -0.62, z: -0.38, y: SOCKET_Y }, // 220Ω left
+    ],
+  },
+  // Black: LED cathode hole → docked GND, routed along the front/bottom margin
+  // (z ≈ -1.62) and up past the header so it never crosses the components.
+  {
+    id: "b2-led-gnd",
+    part: "j2", // Jumper wire (GND)
+    loops: ["bb-led"],
+    color: "#18181b",
+    via: [
+      { x: 0.78, z: -0.38, y: SOCKET_Y }, // LED cathode
+      { x: 0.78, z: -1.62, y: SOCKET_Y }, // drop to the front margin
+      { x: -2.5, z: -1.62, y: SOCKET_Y }, // run along the front margin
+      { x: -2.5, z: 0.55, y: SOCKET_Y }, // up past the docked header
+      { x: -2.35, z: 0.55, y: SOCKET_Y }, // docked GND
+    ],
+  },
+];
+
+/** Low arch between two socket points; both ends stay on the board plane. */
+const fig2Hop = (A: THREE.Vector3, B: THREE.Vector3) => {
+  const mid = A.clone().lerp(B, 0.5);
+  mid.y = SOCKET_Y + Math.min(0.36, Math.max(0.16, A.distanceTo(B) * 0.14));
+  return new THREE.QuadraticBezierCurve3(A, mid, B);
+};
+
+/** Build the three Fig. 02 jumpers as one chained low-arch path per wire. */
+function buildFig2Runs(): BuiltRun[] {
+  return FIG2_WIRES.map((w) => {
+    const path = new THREE.CurvePath<THREE.Vector3>();
+    let span = 0;
+    const at = (n: WNode) =>
+      new THREE.Vector3(n.x ?? 0, n.y ?? SOCKET_Y, n.z ?? 0);
+    for (let i = 0; i < w.via.length - 1; i++) {
+      const A = at(w.via[i]);
+      const B = at(w.via[i + 1]);
+      span += A.distanceTo(B);
+      path.add(fig2Hop(A, B));
+    }
+    const bootAt = (t: number, away: number) => {
+      const d = path.getTangentAt(t).normalize();
+      const pos = path
+        .getPointAt(t)
+        .addScaledVector(d, away * FIG2_BOOT_LEN * 0.5);
+      return { pos, quat: new THREE.Quaternion().setFromUnitVectors(UP, d) };
+    };
+    return {
+      id: w.id,
+      part: w.part,
+      curve: path,
+      color: w.color,
+      loops: w.loops,
+      r: FIG2_TUBE_R,
+      bootR: FIG2_BOOT_R,
+      bootLen: FIG2_BOOT_LEN,
+      // lift each boot along the wire so it seats on the socket, not through it
+      boots: [bootAt(0, 1), bootAt(1, -1)],
+      arrows: Math.max(1, Math.min(4, Math.round(span * 0.9))),
+    };
+  });
+}
 
 /* ---------- loops & runs, Figs. 01–05 ----------
  *
@@ -253,58 +359,7 @@ const WIRES: WRun[] = [
     b: Pin(0.175, -2.4),
   },
 
-  /* ---- Fig. 02 · LED + resistor breadboard lab ---- */
-  // +5V rail → red jumper → 220Ω → LED → black jumper → GND rail
-  {
-    id: "b-rail-j1",
-    loops: ["bb-led"],
-    color: RED,
-    a: Pin(-1.9, 1.5, 0.4),
-    b: P("j1", { dx: -0.14, y: 0.32 }),
-  },
-  {
-    id: "b-j1-r1",
-    loops: ["bb-led"],
-    color: RED,
-    a: P("j1", { dx: 0.14, y: 0.32 }),
-    b: P("r1", { dx: -0.16, dz: 0.14, y: 0.3 }),
-  },
-  {
-    id: "b-r1-led",
-    loops: ["bb-led"],
-    color: YELLOW,
-    a: P("r1", { dx: 0.16, y: 0.3 }),
-    b: P("led2", { dx: -0.16, y: 0.3 }),
-  },
-  {
-    id: "b-led-j2",
-    loops: ["bb-led"],
-    color: BLACK,
-    a: P("led2", { dz: -0.16, y: 0.3 }),
-    b: P("j2", { dz: 0.16, y: 0.32 }),
-  },
-  {
-    id: "b-j2-gnd",
-    loops: ["bb-led"],
-    color: BLACK,
-    a: P("j2", { dx: -0.14, y: 0.32 }),
-    b: Pin(-1.9, -1.5, 0.4),
-  },
-  // MCU signal pin → signal jumper → tactile switch leg
-  {
-    id: "b-pin-j3",
-    loops: ["bb-sig"],
-    color: YELLOW,
-    a: Pin(-2.2, 1.35, 0.4),
-    b: P("j3", { dx: -0.16, y: 0.32 }),
-  },
-  {
-    id: "b-j3-sw1",
-    loops: ["bb-sig"],
-    color: YELLOW,
-    a: P("j3", { dx: 0.16, y: 0.32 }),
-    b: P("sw1", { dx: -0.14, dz: 0.14, y: 0.3 }),
-  },
+  /* ---- Fig. 02 · see FIG2_WIRES / buildFig2Runs above ---- */
 
   /* ---- Fig. 04 · ESP32-S3 DevKit ---- */
   // USB-C COM → AMS1117 → WROOM module → GND header row
@@ -528,6 +583,8 @@ function buildFig3Runs(resolve: (n: WNode) => THREE.Vector3): BuiltRun[] {
 
 interface BuiltRun {
   id: string;
+  /** Fig. 02: owning jumper part id — cable visible only while that part is placed */
+  part?: string;
   curve: THREE.Curve<THREE.Vector3>;
   color: string;
   loops: string[];
@@ -653,6 +710,8 @@ function BreadboardWireOverlay({
         (a ? a[1] : 0) + (n.dz ?? 0) + (n.z ?? 0),
       );
     };
+    // Fig. 02: three flush-seated jumpers on exact sockets (see FIG2_WIRES)
+    if (fig === 2) return buildFig2Runs();
     // Fig. 03: four tidy low-profile jumpers (see FIG3_WIRES)
     if (fig === 3) return buildFig3Runs(resolve);
     const loopFig = new Map<string, number>(LOOPS.map((l) => [l.id, l.fig]));
@@ -712,8 +771,14 @@ function BreadboardWireOverlay({
   return (
     <group name="circuit-wire-overlay">
       {runs.map((r) => {
-        // wires exist only while every part of an owning loop is on the board
-        if (!r.loops.some((id) => loopState.closed.has(id))) return null;
+        // Fig. 02: each coloured cable belongs to one jumper wire part — pull
+        // that part from the checklist and its cable disappears immediately.
+        if (fig === 2) {
+          if (!r.part || !placed.has(r.part)) return null;
+        } else if (!r.loops.some((id) => loopState.closed.has(id))) {
+          // other figs: wires exist only while every part of a loop is placed
+          return null;
+        }
         const flowing = r.loops.some((id) => loopState.live.has(id));
         return (
           <group key={`${fig}-${r.id}`}>
