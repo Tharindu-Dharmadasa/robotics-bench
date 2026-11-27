@@ -9,20 +9,24 @@
 
 ## Building now
 
-- **Task 0 — Repo audit** (Status: Done)
-  - Goal: read-only audit of the existing project before adding anything.
-  - Files touched: `src/docs/sandbox/PROGRESS.md` only (this file).
-  - Notes: See "Repo audit" section below. Six questions raised for review before Task 1.1 begins.
+_(ready for Task 1.2a)_
 
 ## Next up
 
-1. Task 1.1 — Dependencies, folders, ESLint import guards
-2. Task 1.2a — `src/types/circuit.ts`
-3. Task 1.2b — program/persistence types + engine interface
+1. Task 1.2a — `src/types/circuit.ts`
+2. Task 1.2b — program/persistence types + engine interface
+3. Task 1.2c — `src/utils/breadboardGrid.ts`
 
 ## Done
 
-_(nothing yet)_
+- **Task 0 — Repo audit** (Status: Done)
+  - Goal: read-only audit of the existing project before adding anything.
+  - Files touched: `src/docs/sandbox/PROGRESS.md` only.
+  - Notes: See "Repo audit" section below.
+- **Task 1.1 — Dependencies, folders, ESLint import guards** (Status: Done)
+  - Files created/updated: `vite.config.ts` (`PluginOption[]` typing, conditional `singlefile` mode, `@` alias, `worker.format: "es"`), `eslint.config.js` (ESLint 9 flat config with `typescript-eslint`, `@eslint/js`, `globals`, `eslint-plugin-react-hooks`, and `no-restricted-imports` boundary rules a, b, c), `src/test/trivial.test.ts`, `vitest.config.ts`, `package.json` (`lint`, `typecheck`, `test` scripts and Phase 1 deps).
+  - Decisions: Scoped 3 noisy rules on legacy files (`no-irregular-whitespace` in `src/components/Batch23Geometry.tsx`, `react-hooks/rules-of-hooks` in `src/components/PartGeometry.tsx`, `no-useless-escape` in `src/customLab/**`) so baseline lint passes without modifying existing app files. Combined `no-restricted-imports` rules for overlapping layers (`src/types/**`, `src/registry/**`, `src/simulation/**` and pure `src/utils/*`) so flat-config blocks do not overwrite each other.
+  - Verification: Proven all 3 boundary rules (a, b, c) fail on temporary violating files, deleted all temporary files (including `src/components/tmpViolation1.ts`), and verified `npm run build`, `npm run lint`, `npm run typecheck`, and `npm run test` all pass.
 
 ## Blocked / needs my input
 
@@ -37,7 +41,7 @@ _(nothing yet)_
 | ID   | Task                                                             | Status      | Tests | Notes             |
 | ---- | ---------------------------------------------------------------- | ----------- | ----- | ----------------- |
 | 0    | Repo audit (read-only)                                           | **Done**    | n/a   | See audit section |
-| 1.1  | Deps, folders, ESLint import guards                              | Not started |       |                   |
+| 1.1  | Deps, folders, ESLint import guards                              | **Done**    | 1/1   | `trivial.test.ts` + a/b/c boundary proofs |
 | 1.2a | `types/circuit.ts`                                               | Not started |       |                   |
 | 1.2b | `types/program.ts`, `types/persistence.ts`, `engineInterface.ts` | Not started |       |                   |
 | 1.2c | `utils/breadboardGrid.ts`                                        | Not started |       |                   |
@@ -253,6 +257,7 @@ This prototype is **independent** of the sandbox architecture described in `ARCH
 | 2026-11-27 | ESLint flat config eslint.config.js; baseline must pass; no mass edits | no ESLint existed                 | Task 1.1      |
 | 2026-11-27 | scripts: lint, typecheck, test                                         |                                   | package.json  |
 | 2026-11-27 | docs stay in src/docs/sandbox/                                         |                                   | all prompts   |
+| 2026-11-27 | Scope 3 lint rules on legacy files only (`Batch23Geometry.tsx`, `PartGeometry.tsx`, `src/customLab/**`) | Baseline must pass without editing existing app files | `eslint.config.js` |
 
 ## Fixture constants (fill in during Task 1.2d, then treat as fixed)
 
