@@ -31,6 +31,7 @@ import type {
   GridSpec,
   HoleCoord,
   PinAddress,
+  PinDefinition,
   SafeId,
 } from "@/types/circuit";
 import { SAFE_ID_REGEX } from "@/types/persistence";
@@ -51,13 +52,41 @@ export const RAIL_SEGMENT_GAP_EXTRA_PITCHES = 1;
 /** Default snap/hit radius as a fraction of pitchMeters. */
 export const HIT_RADIUS_PITCHES = 0.45;
 
+/** Pin snap tolerance for mounted parts as a fraction of pitchMeters. */
+export const SNAP_TOLERANCE_PITCHES = 0.25;
+
+/** Tolerance in metres when breaking ties for anchor pin selection. */
+export const ANCHOR_TIE_EPS_M = 1e-9;
+
 // ---------------------------------------------------------------------------
 // Public interfaces
 // ---------------------------------------------------------------------------
 
+export type QuarterTurns = 0 | 1 | 2 | 3;
+
 export interface ParsedHoleAddress {
   boardId: SafeId;
   hole: HoleCoord;
+}
+
+export type MountedPinResult =
+  | { ok: true; addresses: Record<SafeId, PinAddress> }
+  | {
+      ok: false;
+      reason:
+        | "BAD_QUARTER_TURNS"
+        | "ANCHOR_OUT_OF_BOUNDS"
+        | "NO_PINS"
+        | "PIN_OFF_GRID"
+        | "PIN_COLLISION";
+      pinId?: SafeId;
+    };
+
+export interface AabbXZ {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -630,3 +659,280 @@ function isBetter(
   if (candidate.col !== best.col) return candidate.col < best.col;
   return candidate.row < best.row;
 }
+
+// ---------------------------------------------------------------------------
+// 1.2c-iii: anchor pin, rotation, mounted pins, and AABB calculations
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalises -0 to 0.
+ */
+function cleanZero(n: number): number {
+  return n === 0 ? 0 : n;
+}
+
+/**
+ * Rotates a 2D offset (x, z) about the origin by quarterTurns (k in 0..3).
+ * Matches Three.js mesh rotation.y = k * PI/2 convention:
+ *   k = 0: ( x,  z)
+ *   k = 1: ( z, -x)
+ *   k = 2: (-x, -z)
+ *   k = 3: (-z,  x)
+ *
+ * Implemented with integer-exact swaps and negations, normalising -0 to 0.
+ */
+export function rotateOffsetXZ(
+  x: number,
+  z: number,
+  quarterTurns: QuarterTurns | number
+): { x: number; z: number } {
+  const k = Number(quarterTurns);
+  switch (k) {
+    case 0:
+      return { x: cleanZero(x), z: cleanZero(z) };
+    case 1:
+      return { x: cleanZero(z), z: cleanZero(-x) };
+    case 2:
+      return { x: cleanZero(-x), z: cleanZero(-z) };
+    case 3:
+      return { x: cleanZero(-z), z: cleanZero(x) };
+    default:
+      throw new Error(`Invalid quarterTurns: ${quarterTurns}; expected 0, 1, 2, or 3`);
+  }
+}
+
+/**
+ * Selects the anchor pin from a list of PinDefinition.
+ * Anchor pin = pin with the smallest localPosition[0] (x) in the unrotated part.
+ * Ties go to the smallest localPosition[2] (z), then to pin.id.
+ * x and z ties are compared within ANCHOR_TIE_EPS_M tolerance.
+ * IDs are compared with plain code-unit comparison (< and >), not localeCompare.
+ * Order of the input array does not change the result.
+ * Returns null for an empty list.
+ */
+export function selectAnchorPin(
+  pins: readonly PinDefinition[]
+): PinDefinition | null {
+  if (pins.length === 0) {
+    return null;
+  }
+
+  let best: PinDefinition = pins[0];
+
+  for (let i = 1; i < pins.length; i++) {
+    const candidate = pins[i];
+    const candX = candidate.localPosition[0];
+    const bestX = best.localPosition[0];
+
+    if (candX < bestX - ANCHOR_TIE_EPS_M) {
+      best = candidate;
+      continue;
+    }
+    if (candX > bestX + ANCHOR_TIE_EPS_M) {
+      continue;
+    }
+
+    // X is tied within tolerance; compare Z
+    const candZ = candidate.localPosition[2];
+    const bestZ = best.localPosition[2];
+
+    if (candZ < bestZ - ANCHOR_TIE_EPS_M) {
+      best = candidate;
+      continue;
+    }
+    if (candZ > bestZ + ANCHOR_TIE_EPS_M) {
+      continue;
+    }
+
+    // Both X and Z are tied; compare ID with plain code-unit comparison (< and >)
+    if (candidate.id < best.id) {
+      best = candidate;
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Resolves all pin positions of a mounted component to canonical breadboard hole addresses.
+ *
+ * Mapping algorithm:
+ *   1. quarterTurns must be integer 0..3, otherwise reason: "BAD_QUARTER_TURNS".
+ *   2. pins must not be empty, otherwise reason: "NO_PINS".
+ *   3. selectAnchorPin(pins) determines the anchor pin.
+ *   4. anchorHole must be in bounds on grid, otherwise reason: "ANCHOR_OUT_OF_BOUNDS".
+ *   5. For every pin, compute its (x, z) offset from anchor pin in part coordinates:
+ *        dx = pin.localPosition[0] - anchor.localPosition[0]
+ *        dz = pin.localPosition[2] - anchor.localPosition[2]
+ *      Rotate (dx, dz) by quarterTurns via rotateOffsetXZ to get (rotDx, rotDz).
+ *      Board-local target position = holeToLocal(anchorHole) + (rotDx, rotDz).
+ *   6. Snap to hole using nearestHoleLocal with radius SNAP_TOLERANCE_PITCHES * pitchMeters.
+ *      If no hole snaps, returns { ok: false, reason: "PIN_OFF_GRID", pinId: pin.id }.
+ *      (Anchor pin offset is (0, 0) and always snaps exactly to anchorHole).
+ *   7. If two pins resolve to the same hole address, returns { ok: false, reason: "PIN_COLLISION", pinId: pin.id }.
+ *   8. On success, returns { ok: true, addresses: Record<pinId, PinAddress> }.
+ */
+export function mountedPinAddresses(
+  grid: GridSpec,
+  boardId: SafeId,
+  pins: readonly PinDefinition[],
+  anchorHole: HoleCoord,
+  quarterTurns: QuarterTurns | number
+): MountedPinResult {
+  if (
+    typeof quarterTurns !== "number" ||
+    !Number.isInteger(quarterTurns) ||
+    quarterTurns < 0 ||
+    quarterTurns > 3
+  ) {
+    return { ok: false, reason: "BAD_QUARTER_TURNS" };
+  }
+
+  if (pins.length === 0) {
+    return { ok: false, reason: "NO_PINS" };
+  }
+
+  if (!isHoleInBounds(grid, anchorHole)) {
+    return { ok: false, reason: "ANCHOR_OUT_OF_BOUNDS" };
+  }
+
+  const anchorPin = selectAnchorPin(pins);
+  if (!anchorPin) {
+    return { ok: false, reason: "NO_PINS" };
+  }
+
+  const anchorPos = holeToLocal(grid, anchorHole);
+  if (!anchorPos) {
+    return { ok: false, reason: "ANCHOR_OUT_OF_BOUNDS" };
+  }
+
+  const anchorPinX = anchorPin.localPosition[0];
+  const anchorPinZ = anchorPin.localPosition[2];
+  const snapRadius = SNAP_TOLERANCE_PITCHES * grid.pitchMeters;
+
+  const addresses: Record<SafeId, PinAddress> = {};
+  const holeToPinId = new Map<string, SafeId>();
+
+  for (const pin of pins) {
+    let resolvedHole: HoleCoord;
+
+    if (pin.id === anchorPin.id) {
+      // The anchor pin must resolve exactly to anchorHole
+      resolvedHole = anchorHole;
+    } else {
+      const dx = pin.localPosition[0] - anchorPinX;
+      const dz = pin.localPosition[2] - anchorPinZ;
+      const rot = rotateOffsetXZ(dx, dz, quarterTurns as QuarterTurns);
+      const targetX = anchorPos.x + rot.x;
+      const targetZ = anchorPos.z + rot.z;
+
+      const snapped = nearestHoleLocal(grid, targetX, targetZ, snapRadius);
+      if (!snapped) {
+        return { ok: false, reason: "PIN_OFF_GRID", pinId: pin.id };
+      }
+      resolvedHole = snapped;
+    }
+
+    const holeKey = `${resolvedHole.region}:${resolvedHole.col}:${resolvedHole.row}`;
+    if (holeToPinId.has(holeKey)) {
+      return { ok: false, reason: "PIN_COLLISION", pinId: pin.id };
+    }
+    holeToPinId.set(holeKey, pin.id);
+
+    addresses[pin.id] = formatHoleAddress(boardId, resolvedHole);
+  }
+
+  return { ok: true, addresses };
+}
+
+/**
+ * Translates a 2D AABB by (dx, dz).
+ */
+export function translateAabbXZ(aabb: AabbXZ, dx: number, dz: number): AabbXZ {
+  return {
+    minX: cleanZero(aabb.minX + dx),
+    maxX: cleanZero(aabb.maxX + dx),
+    minZ: cleanZero(aabb.minZ + dz),
+    maxZ: cleanZero(aabb.maxZ + dz),
+  };
+}
+
+/**
+ * Rotates an AABB about a pivot point (x, z) by quarterTurns (0..3).
+ * Rotates the 4 corners relative to the pivot, then takes the enclosing min/max.
+ */
+export function rotateAabbXZ(
+  aabb: AabbXZ,
+  quarterTurns: QuarterTurns | number,
+  pivot: { x: number; z: number }
+): AabbXZ {
+  const corners = [
+    { x: aabb.minX - pivot.x, z: aabb.minZ - pivot.z },
+    { x: aabb.maxX - pivot.x, z: aabb.minZ - pivot.z },
+    { x: aabb.minX - pivot.x, z: aabb.maxZ - pivot.z },
+    { x: aabb.maxX - pivot.x, z: aabb.maxZ - pivot.z },
+  ];
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+
+  for (const c of corners) {
+    const rot = rotateOffsetXZ(c.x, c.z, quarterTurns);
+    const worldX = rot.x + pivot.x;
+    const worldZ = rot.z + pivot.z;
+    if (worldX < minX) minX = worldX;
+    if (worldX > maxX) maxX = worldX;
+    if (worldZ < minZ) minZ = worldZ;
+    if (worldZ > maxZ) maxZ = worldZ;
+  }
+
+  return {
+    minX: cleanZero(minX),
+    maxX: cleanZero(maxX),
+    minZ: cleanZero(minZ),
+    maxZ: cleanZero(maxZ),
+  };
+}
+
+/**
+ * Computes the board-local AABB of a mounted part.
+ *
+ * Transformation composition:
+ *   1. Part coordinates have the anchor pin at anchorPinXZ.
+ *   2. Rotating the part by quarterTurns about anchorPinXZ leaves anchorPinXZ at anchorPinXZ,
+ *      and rotates all part extents relative to that pivot:
+ *        rotatedAboutPivot = rotateAabbXZ(partAabb, quarterTurns, anchorPinXZ).
+ *   3. Since anchorPinXZ sits exactly at board position holeToLocal(anchorHole), the translation
+ *      from the pivot in part-space to board space is simply:
+ *        dx = holePos.x - anchorPinXZ.x
+ *        dz = holePos.z - anchorPinXZ.z
+ *      Equivalently: rotate partAabb about anchorPinXZ (so pivot is still at anchorPinXZ),
+ *      then translate by (holePos.x - anchorPinXZ.x, holePos.z - anchorPinXZ.z).
+ *      Notice that corner - anchorPinXZ rotated, then + anchorPinXZ + (holePos - anchorPinXZ)
+ *      simplifies to: rotate(corner - anchorPinXZ) + holePos.
+ *      Translating rotatedAboutPivot by (holePos.x - anchorPinXZ.x, holePos.z - anchorPinXZ.z)
+ *      yields the exact board-local AABB enclosing the rotated part footprint.
+ *
+ * Returns null if anchorHole is out of bounds.
+ */
+export function mountedFootprintAabb(
+  grid: GridSpec,
+  anchorHole: HoleCoord,
+  partAabb: AabbXZ,
+  anchorPinXZ: { x: number; z: number },
+  quarterTurns: QuarterTurns | number
+): AabbXZ | null {
+  const holePos = holeToLocal(grid, anchorHole);
+  if (!holePos) {
+    return null;
+  }
+
+  const rotatedAboutPivot = rotateAabbXZ(partAabb, quarterTurns, anchorPinXZ);
+  const dx = holePos.x - anchorPinXZ.x;
+  const dz = holePos.z - anchorPinXZ.z;
+
+  return translateAabbXZ(rotatedAboutPivot, dx, dz);
+}
+

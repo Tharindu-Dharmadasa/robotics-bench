@@ -9,13 +9,12 @@
 
 ## Building now
 
-Task 1.2c — `src/utils/breadboardGrid.ts` (**In progress:** 1.2c-i done; 1.2c-ii, 1.2c-iii pending)
+Task 1.2d — `src/utils/manifestValidation.ts`, `src/test/fixtures.ts`
 
 ## Next up
 
-1. Task 1.2c-ii / 1.2c-iii — `src/utils/breadboardGrid.ts` (3D offsets, hit-testing, rotated AABB; awaiting `anchorHole` decision for 1.2c-iii)
-2. Task 1.2d — `src/utils/manifestValidation.ts`, `src/test/fixtures.ts`
-3. Task 1.3 — `src/simulation/unionFindNetlist.ts`
+1. Task 1.2d — `src/utils/manifestValidation.ts`, `src/test/fixtures.ts`
+2. Task 1.3 — `src/simulation/unionFindNetlist.ts`
 
 ## Done
 
@@ -35,14 +34,15 @@ Task 1.2c — `src/utils/breadboardGrid.ts` (**In progress:** 1.2c-i done; 1.2c-
   - Files created: `src/types/program.ts`, `src/types/persistence.ts`, `src/simulation/engineInterface.ts`, `src/types/program.test.ts`, `src/types/persistence.test.ts`, `src/simulation/engineInterface.test.ts`.
   - Tests: 26 new tests passing (`program.test.ts` 4, `persistence.test.ts` 18, `engineInterface.test.ts` 4; 54 total across 5 test files).
   - Verification: `npm run build`, `npm run lint`, `npm run typecheck`, and `npm run test` all pass. Proved `expectTypeOf` is checked by `tsc --noEmit` via deliberate break/revert in all three test files.
-- **Task 1.2c-i — `src/utils/breadboardGrid.ts` (address, bounds, strips)** (Status: Done; part 1 of 3)
-  - Files created: `src/utils/breadboardGrid.ts`, `src/utils/breadboardGrid.test.ts`.
-  - Tests: 9 new tests passing (63 total across 6 test files).
-  - Verification: `npm run build`, `npm run lint`, `npm run typecheck`, and `npm run test` all pass, plus ESLint pure-utils boundary proof with `Get-FileHash`.
+- **Task 1.2c — `src/utils/breadboardGrid.ts` (grid, offsets, hit-testing, mounting, AABB)** (Status: Done)
+  - Files created/updated: `src/utils/breadboardGrid.ts`, `src/utils/breadboardGrid.test.ts`.
+  - Tests: 52 tests passing (106 total across 6 test files).
+  - Scope: 1.2c-i (address formatting/parsing, hole bounds, strip connectivity), 1.2c-ii (local 3D hole positions, analytic nearestHoleLocal hit-testing), and 1.2c-iii (anchor pin selection, rotation table, mounted pin address resolution, rotated and mounted footprint AABB).
+  - Verification: `npm run build`, `npm run lint`, `npm run typecheck`, and `npm run test` all pass, with zero changes to `src/types/**`.
 
 ## Blocked / needs my input
 
-- **Task 1.2c (`src/utils/breadboardGrid.ts`):** Blocked on the `anchorHole` convention decision.
+_(none)_
 
 ---
 
@@ -56,7 +56,7 @@ Task 1.2c — `src/utils/breadboardGrid.ts` (**In progress:** 1.2c-i done; 1.2c-
 | 1.1  | Deps, folders, ESLint import guards                              | **Done**    | 1/1   | `trivial.test.ts` + a/b/c boundary proofs                                        |
 | 1.2a | `types/circuit.ts`                                               | Done        | 27/27 | circuit.test.ts                                                                  |
 | 1.2b | `types/program.ts`, `types/persistence.ts`, `engineInterface.ts` | **Done**    | 26/26 | `program.test.ts` (4), `persistence.test.ts` (18), `engineInterface.test.ts` (4) |
-| 1.2c | `utils/breadboardGrid.ts`                                        | **In progress** | 9/9   | 1.2c-i done (address, bounds, strips); 1.2c-ii, 1.2c-iii pending                 |
+| 1.2c | `utils/breadboardGrid.ts`                                        | **Done**    | 52/52 | breadboardGrid.test.ts (1.2c-i, 1.2c-ii, 1.2c-iii all complete)                  |
 | 1.2d | `utils/manifestValidation.ts`, `test/fixtures.ts`                | Not started |       |                                                                                  |
 | 1.3  | `unionFindNetlist.ts` (DSU nets + conductor graph)               | Not started |       |                                                                                  |
 | 1.4  | `dcNodalSolver.ts` (criteria a–i)                                | Not started |       |                                                                                  |
@@ -275,6 +275,7 @@ This prototype is **independent** of the sandbox architecture described in `ARCH
 | 2026-11-27 | `zod@4.6.7`: use plain `z.number()` instead of `.finite()`                                                                                                                                                                                                                          | `.finite()` is `@deprecated` (no-op) in Zod v4; `z.number()` rejects `NaN`/`Infinity`/`-Infinity` by default | `src/types/persistence.ts` |
 | 2026-11-27 | persistence.ts exports: SCHEMA_VERSION, SAFE_ID_REGEX, MAX_COMPONENTS, MAX_WIRES, MAX_COMPRESSED_CHARS, MAX_JSON_CHARS, DESK_POSITION_LIMIT_M, safeIdSchema, holeCoordSchema, pinRefSchema, placementSchema, placedComponentSchema, jumperWireSchema, saveFileSchema, type SaveFile | Later tasks (1.2d, 3.1b) reuse these names; do not redefine                                                  | src/types/persistence.ts   |
 | 2026-11-27 | schemaVersion is z.number().int() (not a literal) so old saves still parse; version handling belongs to persistenceCodec (3.1b)                                                                                                                                                     | Migrations need to read old versions                                                                         | src/types/persistence.ts   |
+| 2026-11-27 | Four anchorHole mounting rules: (1) anchor pin = smallest unrotated x, ties to smallest z, then id (< / > code unit); (2) snap tolerance = 0.25 pitch (SNAP_TOLERANCE_PITCHES); (3) rotation table matches Three.js (k=0 (x,z), k=1 (z,-x), k=2 (-x,-z), k=3 (-z,x)); (4) board frame (origin at centre, +x along cols, +z along rows, y=0) | no new type fields (RULES)                                                                                   | breadboardGrid.ts          |
 
 ## Fixture constants (fill in during Task 1.2d, then treat as fixed)
 
