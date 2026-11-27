@@ -3,19 +3,19 @@
 > Updated by the AI agent at the end of every task (see ANTIGRAVITY_GUIDE.md). Verify it yourself before committing.
 > Status values: `Not started` · `In progress` · `Done` · `Blocked`
 
-**Last updated:** 2026-11-27 **Branch:** `feature/sandbox`
+**Last updated:** 2026-11-27 **Branch:** `feat/sandbox`
 
 ---
 
 ## Building now
 
-Task 1.2b — `src/types/program.ts`, `src/types/persistence.ts`, `src/simulation/engineInterface.ts`
+Task 1.2c — `src/utils/breadboardGrid.ts` (**Blocked** on `anchorHole` decision)
 
 ## Next up
 
-1. Task 1.2b — program/persistence types + engine interface
-2. Task 1.2c — `src/utils/breadboardGrid.ts`
-3. Task 1.2d — `src/utils/manifestValidation.ts`, `src/test/fixtures.ts`
+1. Task 1.2c — `src/utils/breadboardGrid.ts` (**Blocked:** awaiting `anchorHole` decision)
+2. Task 1.2d — `src/utils/manifestValidation.ts`, `src/test/fixtures.ts`
+3. Task 1.3 — `src/simulation/unionFindNetlist.ts`
 
 ## Done
 
@@ -31,10 +31,14 @@ Task 1.2b — `src/types/program.ts`, `src/types/persistence.ts`, `src/simulatio
   - Files created: `src/types/circuit.ts`, `src/types/circuit.test.ts`.
   - Tests: 27 passing (8 describe blocks: constants, FAULT_ORDER, FAULT_PRECEDENCE_LEVEL, PinDefinition narrowing, ComponentElectricalModel narrowing, ComponentPlacement narrowing, PinRef + CircuitFaultKind, NetDescriptor + SimulationFrameOutput).
   - Verification: `npm run build`, `npm run lint`, `npm run typecheck`, and `npm run test` all pass. Proved `expectTypeOf` is checked by `tsc --noEmit` via deliberate break/revert of `quarterTurns` type assertion.
+- **Task 1.2b — Program types, persistence schemas, engine interface** (Status: Done)
+  - Files created: `src/types/program.ts`, `src/types/persistence.ts`, `src/simulation/engineInterface.ts`, `src/types/program.test.ts`, `src/types/persistence.test.ts`, `src/simulation/engineInterface.test.ts`.
+  - Tests: 26 new tests passing (`program.test.ts` 4, `persistence.test.ts` 18, `engineInterface.test.ts` 4; 54 total across 5 test files).
+  - Verification: `npm run build`, `npm run lint`, `npm run typecheck`, and `npm run test` all pass. Proved `expectTypeOf` is checked by `tsc --noEmit` via deliberate break/revert in all three test files.
 
 ## Blocked / needs my input
 
-_(nothing yet)_
+- **Task 1.2c (`src/utils/breadboardGrid.ts`):** Blocked on the `anchorHole` convention decision.
 
 ---
 
@@ -42,20 +46,20 @@ _(nothing yet)_
 
 ### Phase 1 — Core types, pure solver, worker bridge
 
-| ID   | Task                                                             | Status      | Tests | Notes             |
-| ---- | ---------------------------------------------------------------- | ----------- | ----- | ----------------- |
-| 0    | Repo audit (read-only)                                           | **Done**    | n/a   | See audit section |
-| 1.1  | Deps, folders, ESLint import guards                              | **Done**    | 1/1   | `trivial.test.ts` + a/b/c boundary proofs |
-| 1.2a | `types/circuit.ts`                                               | Not started |       |                   |
-| 1.2b | `types/program.ts`, `types/persistence.ts`, `engineInterface.ts` | Not started |       |                   |
-| 1.2c | `utils/breadboardGrid.ts`                                        | Not started |       |                   |
-| 1.2d | `utils/manifestValidation.ts`, `test/fixtures.ts`                | Not started |       |                   |
-| 1.3  | `unionFindNetlist.ts` (DSU nets + conductor graph)               | Not started |       |                   |
-| 1.4  | `dcNodalSolver.ts` (criteria a–i)                                | Not started |       |                   |
-| 1.5a | `faultValidator.ts`                                              | Not started |       |                   |
-| 1.5b | `behavioralEngine.ts` (tiers, fixed-step, lifecycle)             | Not started |       |                   |
-| 1.6a | `worker.ts`, `engineClient.ts`                                   | Not started |       |                   |
-| 1.6b | `telemetryStore.ts` + blink-LED integration test                 | Not started |       |                   |
+| ID   | Task                                                             | Status      | Tests | Notes                                                                            |
+| ---- | ---------------------------------------------------------------- | ----------- | ----- | -------------------------------------------------------------------------------- |
+| 0    | Repo audit (read-only)                                           | **Done**    | n/a   | See audit section                                                                |
+| 1.1  | Deps, folders, ESLint import guards                              | **Done**    | 1/1   | `trivial.test.ts` + a/b/c boundary proofs                                        |
+| 1.2a | `types/circuit.ts`                                               | Done        | 27/27 | circuit.test.ts                                                                  |
+| 1.2b | `types/program.ts`, `types/persistence.ts`, `engineInterface.ts` | **Done**    | 26/26 | `program.test.ts` (4), `persistence.test.ts` (18), `engineInterface.test.ts` (4) |
+| 1.2c | `utils/breadboardGrid.ts`                                        | **Blocked** |       | Blocked on `anchorHole` decision                                                 |
+| 1.2d | `utils/manifestValidation.ts`, `test/fixtures.ts`                | Not started |       |                                                                                  |
+| 1.3  | `unionFindNetlist.ts` (DSU nets + conductor graph)               | Not started |       |                                                                                  |
+| 1.4  | `dcNodalSolver.ts` (criteria a–i)                                | Not started |       |                                                                                  |
+| 1.5a | `faultValidator.ts`                                              | Not started |       |                                                                                  |
+| 1.5b | `behavioralEngine.ts` (tiers, fixed-step, lifecycle)             | Not started |       |                                                                                  |
+| 1.6a | `worker.ts`, `engineClient.ts`                                   | Not started |       |                                                                                  |
+| 1.6b | `telemetryStore.ts` + blink-LED integration test                 | Not started |       |                                                                                  |
 
 **Phase 1 gate:** all Phase 1 tests green and I can explain commit → worker → frame flow. `[ ]`
 
@@ -93,7 +97,6 @@ _(nothing yet)_
 ---
 
 ## Repo audit (Task 0)
-
 
 ### Package versions (`package.json`)
 
@@ -253,15 +256,21 @@ This prototype is **independent** of the sandbox architecture described in `ARCH
 
 ## Decisions log
 
-| Date       | Decision                                                               | Why                               | Docs affected |
-| ---------- | ---------------------------------------------------------------------- | --------------------------------- | ------------- |
-|            |                                                                        |                                   |               |
-| 2026-11-27 | singlefile plugin conditional via mode flag, default off               | workers/.glb need separate assets | vite.config   |
-| 2026-11-27 | delete src/customLab (own commit)                                      | replaced by new sandbox           | App.tsx       |
-| 2026-11-27 | ESLint flat config eslint.config.js; baseline must pass; no mass edits | no ESLint existed                 | Task 1.1      |
-| 2026-11-27 | scripts: lint, typecheck, test                                         |                                   | package.json  |
-| 2026-11-27 | docs stay in src/docs/sandbox/                                         |                                   | all prompts   |
-| 2026-11-27 | Scope 3 lint rules on legacy files only (`Batch23Geometry.tsx`, `PartGeometry.tsx`, `src/customLab/**`) | Baseline must pass without editing existing app files | `eslint.config.js` |
+| Date       | Decision                                                                                                                                                                                                                                                                            | Why                                                                                                          | Docs affected              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------- |
+|            |                                                                                                                                                                                                                                                                                     |                                                                                                              |                            |
+| 2026-11-27 | singlefile plugin conditional via mode flag, default off                                                                                                                                                                                                                            | workers/.glb need separate assets                                                                            | vite.config                |
+| 2026-11-27 | delete src/customLab (own commit)                                                                                                                                                                                                                                                   | replaced by new sandbox                                                                                      | App.tsx                    |
+| 2026-11-27 | ESLint flat config eslint.config.js; baseline must pass; no mass edits                                                                                                                                                                                                              | no ESLint existed                                                                                            | Task 1.1                   |
+| 2026-11-27 | scripts: lint, typecheck, test                                                                                                                                                                                                                                                      |                                                                                                              | package.json               |
+| 2026-11-27 | docs stay in src/docs/sandbox/                                                                                                                                                                                                                                                      |                                                                                                              | all prompts                |
+| 2026-11-27 | Scope 3 lint rules on legacy files only (`Batch23Geometry.tsx`, `PartGeometry.tsx`, `src/customLab/**`)                                                                                                                                                                             | Baseline must pass without editing existing app files                                                        | `eslint.config.js`         |
+| 2026-11-27 | Save envelope shape `{ schemaVersion, components, wires }` with `SCHEMA_VERSION = 1`                                                                                                                                                                                                | Strict top-level persistence contract; no extra fields                                                       | `src/types/persistence.ts` |
+| 2026-11-27 | Export `SAFE_ID_REGEX = /^[a-zA-Z0-9_-]+$/` from `src/types/persistence.ts`                                                                                                                                                                                                         | Reused by Task 1.2d (`manifestValidation.ts`)                                                                | `src/types/persistence.ts` |
+| 2026-11-27 | Export `DESK_POSITION_LIMIT_M = 5` from `src/types/persistence.ts`                                                                                                                                                                                                                  | Named constant for `±5 m` desk position bound (§5.6.10)                                                      | `src/types/persistence.ts` |
+| 2026-11-27 | `zod@4.6.7`: use plain `z.number()` instead of `.finite()`                                                                                                                                                                                                                          | `.finite()` is `@deprecated` (no-op) in Zod v4; `z.number()` rejects `NaN`/`Infinity`/`-Infinity` by default | `src/types/persistence.ts` |
+| 2026-11-27 | persistence.ts exports: SCHEMA_VERSION, SAFE_ID_REGEX, MAX_COMPONENTS, MAX_WIRES, MAX_COMPRESSED_CHARS, MAX_JSON_CHARS, DESK_POSITION_LIMIT_M, safeIdSchema, holeCoordSchema, pinRefSchema, placementSchema, placedComponentSchema, jumperWireSchema, saveFileSchema, type SaveFile | Later tasks (1.2d, 3.1b) reuse these names; do not redefine                                                  | src/types/persistence.ts   |
+| 2026-11-27 | schemaVersion is z.number().int() (not a literal) so old saves still parse; version handling belongs to persistenceCodec (3.1b)                                                                                                                                                     | Migrations need to read old versions                                                                         | src/types/persistence.ts   |
 
 ## Fixture constants (fill in during Task 1.2d, then treat as fixed)
 
